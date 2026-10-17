@@ -29,8 +29,11 @@ Three channels, each with one job:
 apps/server/src/
   index.ts              Express + Socket.IO bootstrap; wipes tmp/rooms at startup
   rooms/RoomManager.ts  create/join/leave, codes, host migration, reconnect grace, idle timeout
-  game/stateMachine.ts  pure phase transitions (unit tested)
-  game/GameRunner.ts    timers and deadlines; calls the state machine and broadcasts
+  game/rules.ts         pure rules: sound picking, vote validation, tally (unit tested)
+  game/GameRunner.ts    phase transitions, timers and deadlines; early phase ends (unit tested
+                        with fake timers)
+  game/timing.ts        fixed phase durations (normal and GAME_FAST)
+  routes/audio.ts       recording upload, room audio serving
   voice/livekit.ts      token minting, setPublishAllowed(room, bool)
   audio/storage.ts      per-room temp dir, saving and validating files, deleteRoom(code)
   routes/               HTTP routes (see PROTOCOL.md)
@@ -49,8 +52,8 @@ LOBBY ─start─► ROUND_INTRO ─► REFERENCE ─► RECORDING ─► PLAYBA
   └──────────────── backToLobby ◄──── FINAL_RESULTS ◄──── last round ──────────────┘
 ```
 
-- `stateMachine.ts` is a pure function: `(state, event) → state`. Events are `START`, `TICK_DEADLINE`, `VOTE`, `PLAYER_LEFT`, and so on. This keeps all the rules testable without timers or sockets.
-- `GameRunner` owns one timer per room. On each deadline it sends `TICK_DEADLINE`.
+- `GameRunner` owns one timer per room and moves it through the phases. Player actions (an upload, a vote, someone leaving) can end a phase early: recording ends once every connected player's upload has arrived, voting once everyone has voted. The game ends early when fewer than 2 players remain.
+- The rules themselves (picking sounds, validating a ballot, tallying votes) are pure functions in `rules.ts`. `GameRunner` is tested by driving whole games with fake timers.
 - Every phase has a `deadline` (server epoch ms) included in `room:state`.
 
 ### Timing sync
@@ -59,6 +62,10 @@ LOBBY ─start─► ROUND_INTRO ─► REFERENCE ─► RECORDING ─► PLAYBA
 - Countdowns and "start playing at T" use the server clock adjusted by that offset.
 - **Reference** and **playback** clips are scheduled at a server timestamp (`startsAt`). Clients preload the audio files when the phase starts and play them at `startsAt`. This keeps everyone hearing the same clip within a few tens of ms.
 - **Playback** has a sub-index (`playbackIndex`), advanced by the server, so all players hear the same clip at the same time.
+
+### Phase timings
+
+Fixed durations live in `apps/server/src/game/timing.ts`. `GAME_FAST=1` switches to shorter ones; the Playwright config sets it when it starts the server itself.
 
 ## Voice and muting
 
@@ -75,18 +82,19 @@ LOBBY ─start─► ROUND_INTRO ─► REFERENCE ─► RECORDING ─► PLAYBA
 
 1. When RECORDING starts, the client opens a **separate** `getUserMedia` stream with `{ echoCancellation: true, noiseSuppression: false, autoGainControl: false }`. Noise suppression is off so animal noises and beatboxing aren't filtered out as "noise".
 2. A `MediaRecorder` records `audio/webm;codecs=opus`, or `audio/mp4` on Safari. The duration comes from the phase deadline.
-3. When the phase ends, the client uploads the blob with `POST /api/rooms/:code/rounds/:round/recording`.
+3. When the window closes, the client uploads the blob as the raw request body with `POST /api/rooms/:code/rounds/:round/recording`. The phase ends as soon as every connected player's recording has arrived, or 3s after the window otherwise.
 4. The server checks:
    - the size (2 MB or less),
-   - the MIME type and magic bytes,
-   - the phase (RECORDING, or a grace period of a few seconds after it),
+   - the format, from the file's first bytes (the declared Content-Type is ignored),
+   - the phase (RECORDING, which includes the 3s upload grace),
    - one recording per player per round.
 5. The file is stored as `tmp/rooms/<code>/rec-<round>-<playerId>.<ext>`.
 
 ## Audio storage and lifecycle
 
 ```
-sounds/default/            permanent, read-only, shipped with the repo (manifest.json + clips)
+sounds/default/            permanent, read-only, shipped with the repo: clips, manifest.json, CREDITS.md
+                           (CC0 / CC BY clips, plus public-domain tunes from scripts/generate-synth-sounds.mjs)
 tmp/rooms/<code>/          ephemeral, one dir per room
     snd-<uuid>.<ext>       custom lobby sounds
     rec-<round>-<pid>.ext  recordings

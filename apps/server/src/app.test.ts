@@ -4,7 +4,8 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { io as ioClient, type Socket } from 'socket.io-client';
-import type { ClientToServerEvents, RoomState, ServerToClientEvents } from '@cyrp/shared';
+import type { ClientToServerEvents, RoomState, ServerToClientEvents, SoundRef } from '@cyrp/shared';
+import { FAST_TIMING } from './game/timing.js';
 import { createApp } from './app.js';
 import { createAudioStorage } from './audio/storage.js';
 import type { VoiceService } from './voice/livekit.js';
@@ -22,7 +23,16 @@ const voice = {
   removeParticipant: vi.fn(async () => {}),
   closeRoom: vi.fn(async () => {}),
 } satisfies VoiceService;
-const { server, close } = createApp({ storage, voice, debug: true });
+const sounds: SoundRef[] = [
+  { id: 'default:beep', label: 'Beep', durationMs: 1000, url: '/sounds/default/beep.wav' },
+];
+const { server, close } = createApp({
+  storage,
+  voice,
+  defaultSounds: sounds,
+  timing: FAST_TIMING,
+  debug: true,
+});
 let baseUrl: string;
 const clients: Client[] = [];
 
@@ -239,4 +249,73 @@ describe('voice', () => {
     await alice.emitWithAck('room:leave', {});
     expect(voice.closeRoom).toHaveBeenCalledWith(created.code);
   });
+});
+
+describe('recordings over HTTP', () => {
+  const wav = (bytes = 2000) => {
+    const b = Buffer.alloc(44 + bytes);
+    b.write('RIFF', 0, 'latin1');
+    b.write('WAVE', 8, 'latin1');
+    return b;
+  };
+  const upload = (code: string, round: number, token: string, body: Buffer) =>
+    fetch(`${baseUrl}/api/rooms/${code}/rounds/${round}/recording`, {
+      method: 'POST',
+      headers: { 'X-Session-Token': token, 'Content-Type': 'audio/wav' },
+      body: new Uint8Array(body),
+    });
+
+  it('accepts one valid recording per player and serves it to room members only', async () => {
+    const alice = await connect();
+    const created = await alice.emitWithAck('room:create', { nickname: 'Alice', color: '#ff0000' });
+    if (!created.ok) throw new Error(created.error);
+    const bob = await connect();
+    const joined = await bob.emitWithAck('room:join', {
+      code: created.code,
+      nickname: 'Bob',
+      color: '#00ff00',
+    });
+    if (!joined.ok) throw new Error(joined.error);
+
+    expect((await upload(created.code, 1, created.sessionToken, wav())).status).toBe(409);
+
+    const recording = nextState(alice, (s) => s.phase === 'RECORDING');
+    expect(await alice.emitWithAck('game:start', {})).toEqual({ ok: true });
+    const state = await recording;
+
+    const bad = await upload(
+      created.code,
+      1,
+      created.sessionToken,
+      Buffer.from('<html>nope</html>'),
+    );
+    expect([bad.status, await bad.json()]).toEqual([
+      415,
+      { ok: false, error: 'UNSUPPORTED_FORMAT' },
+    ]);
+    expect((await upload(created.code, 1, created.sessionToken, wav(3_000_000))).status).toBe(413);
+    expect((await upload(created.code, 1, 'forged', wav())).status).toBe(401);
+
+    expect((await upload(created.code, 1, created.sessionToken, wav())).status).toBe(200);
+    const again = await upload(created.code, 1, created.sessionToken, wav());
+    expect([again.status, await again.json()]).toEqual([
+      409,
+      { ok: false, error: 'ALREADY_SUBMITTED' },
+    ]);
+
+    // Bob uploads after the window closed: the last upload starts playback right away.
+    await new Promise((r) => setTimeout(r, Math.max(0, state.recording!.endsAt - Date.now() + 50)));
+    const playback = nextState(alice, (s) => s.phase === 'PLAYBACK');
+    expect((await upload(created.code, 1, joined.sessionToken, wav())).status).toBe(200);
+    const { clips, myClipId } = await playback;
+    expect(clips).toHaveLength(2);
+    expect(clips.map((c) => c.id)).toContain(myClipId);
+
+    const url = `${baseUrl}${clips[0]!.url}`;
+    expect((await fetch(url)).status).toBe(401);
+    const res = await fetch(`${url}?t=${joined.sessionToken}`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toMatch(/^audio\/wav/);
+    expect((await res.arrayBuffer()).byteLength).toBe(2044);
+  }, 15_000);
 });

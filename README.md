@@ -56,7 +56,8 @@ pnpm dev                    # web on :5173, server on :3000
 apps/web/          React client
 apps/server/       Express + Socket.IO game server
 packages/shared/   Socket events, zod schemas, shared types
-sounds/default/    Default sound pack + manifest.json
+sounds/default/    Default sound pack: 24 meme classics, manifest.json, CREDITS.md (licenses)
+scripts/           Dev scripts
 docs/              Design, architecture, protocol, roadmap
 ```
 

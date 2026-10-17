@@ -71,3 +71,11 @@ export const kickPlayer = (playerId: string) =>
 /** Dev-only: lets the host test the recording mute before the game loop exists. */
 export const debugSetVoiceMuted = (muted: boolean) =>
   call(socket.timeout(TIMEOUT_MS).emitWithAck('debug:setVoiceMuted', { muted }));
+
+export const startGame = () => call(socket.timeout(TIMEOUT_MS).emitWithAck('game:start', {}));
+
+export const castVote = (clipIds: string[]) =>
+  call(socket.timeout(TIMEOUT_MS).emitWithAck('game:vote', { clipIds }));
+
+export const backToLobby = () =>
+  call(socket.timeout(TIMEOUT_MS).emitWithAck('game:backToLobby', {}));

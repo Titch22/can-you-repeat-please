@@ -35,6 +35,8 @@ export default defineConfig({
     {
       command: 'pnpm --filter @cyrp/server dev',
       url: 'http://localhost:3000/api/health',
+      // Shorter game phases. Only applies when Playwright starts the server itself.
+      env: { GAME_FAST: '1' },
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
     },

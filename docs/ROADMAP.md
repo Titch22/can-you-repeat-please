@@ -30,15 +30,15 @@ Each milestone should end with something you can play or demo.
 
 ## M3: Core game loop (default sound pack)
 
-- [ ] `sounds/default/` with about 30 CC0 clips and `manifest.json`
-- [ ] Pure `stateMachine.ts` with unit tests (transitions, votes, scoring, leavers)
-- [ ] GameRunner timers, deadlines, `time:sync`
-- [ ] Reference phase: preload, then synced play at `startsAt`
-- [ ] Recording phase: server-enforced mute, `useRecorder` hook, level meter, upload
-- [ ] Playback phase: shuffled anonymous clips, synced by `playbackIndex`
-- [ ] Voting phase: up to 2 votes, no self-vote, ends early when everyone has voted
-- [ ] Round results, final podium, back to lobby; recordings deleted
-- [ ] Playwright e2e test: 3 fake-mic players, 2 rounds
+- [x] `sounds/default/`: 24 meme classics (CC0/CC BY clips + synthesized public-domain tunes), `manifest.json`, `CREDITS.md`
+- [x] `GameRunner` + pure `rules.ts`, with unit tests (transitions, votes, scoring, leavers)
+- [x] GameRunner timers, deadlines, `time:sync`
+- [x] Reference phase: preload, then synced play at `startsAt`
+- [x] Recording phase: server-enforced mute, `useRecorder` hook, level meter, upload
+- [x] Playback phase: shuffled anonymous clips, synced by the playback `index`
+- [x] Voting phase: up to 2 votes, no self-vote, ends early when everyone has voted
+- [x] Round results, final podium, back to lobby; recordings deleted
+- [x] Playwright e2e test: 3 fake-mic players, 2 rounds
 
 ## M4: Custom sounds
 

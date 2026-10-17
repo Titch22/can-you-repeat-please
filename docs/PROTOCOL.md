@@ -40,10 +40,12 @@ interface SoundRef {
   uploadedBy?: string;
 }
 
-interface Clip {
-  id: string;
+interface PlaybackItem {
+  kind: 'reference' | 'clip';
+  clipId: string | null; // set for clips; what votes refer to
   url: string;
-} // anonymous during PLAYBACK/VOTING
+  durationMs: number;
+}
 
 interface RoomState {
   code: string;
@@ -52,13 +54,17 @@ interface RoomState {
   customSounds: SoundRef[];
   phase: Phase;
   voiceMuted: boolean; // voice chat muted by the game (recording)
-  deadline: number | null; // server epoch ms
+  deadline: number | null; // end of the current phase, server epoch ms
   round: number; // 1-based, 0 in the lobby
   reference: (SoundRef & { startsAt: number }) | null;
-  playback: { clips: Clip[]; index: number; startsAt: number } | null;
-  myVotes: string[]; // clip ids (sent to each player separately)
+  recording: { startsAt: number; endsAt: number } | null; // window after the 3-2-1
+  submittedPlayerIds: string[]; // whose recording arrived this round
+  playback: { items: PlaybackItem[]; index: number; startsAt: number } | null;
+  clips: { id: string; url: string; durationMs: number }[]; // playback order, anonymous
+  myClipId: string | null; // per viewer
+  myVotes: string[]; // per viewer
   votedPlayerIds: string[]; // who has voted (not what they voted for)
-  roundResults: { clipId: string; playerId: string; votes: number }[] | null;
+  roundResults: { clipId: string; playerId: string; votes: number; url: string }[] | null;
 }
 ```
 
@@ -97,15 +103,17 @@ Every event takes an ack callback that receives `{ ok: true, ... } | { ok: false
 
 Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessionToken>`. Routes used as `<audio src>` also accept `?t=<sessionToken>`.
 
-| Method | Route                                      | Body                      | Response         | Notes                                                                                                           |
-| ------ | ------------------------------------------ | ------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/api/health`                              |                           | `{ ok: true }`   |                                                                                                                 |
-| `POST` | `/api/rooms/:code/voice-token`             |                           | `{ url, token }` | LiveKit URL (`LIVEKIT_PUBLIC_URL`) and a 15-min JWT for room `cyrp-<code>`; no publish right while `voiceMuted` |
-| `POST` | `/api/rooms/:code/sounds`                  | multipart `file`, `label` | `SoundRef`       | Lobby only; ≤2 MB, ≤10s, ≤5 per player                                                                          |
-| `POST` | `/api/rooms/:code/rounds/:round/recording` | multipart `file`          | `{ ok: true }`   | During RECORDING plus a 5s grace period; ≤2 MB; one per player per round                                        |
-| `GET`  | `/api/rooms/:code/audio/:fileId`           |                           | audio bytes      | Recordings and custom sounds                                                                                    |
-| `GET`  | `/sounds/default/:file`                    |                           | audio bytes      | Static default pack, public                                                                                     |
+| Method | Route                                      | Body                       | Response         | Notes                                                                                                                                      |
+| ------ | ------------------------------------------ | -------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/api/health`                              |                            | `{ ok: true }`   |                                                                                                                                            |
+| `POST` | `/api/rooms/:code/voice-token`             |                            | `{ url, token }` | LiveKit URL (`LIVEKIT_PUBLIC_URL`) and a 15-min JWT for room `cyrp-<code>`; no publish right while `voiceMuted`                            |
+| `POST` | `/api/rooms/:code/sounds`                  | multipart `file`, `label`  | `SoundRef`       | Lobby only; ≤2 MB, ≤10s, ≤5 per player                                                                                                     |
+| `POST` | `/api/rooms/:code/rounds/:round/recording` | raw audio bytes (the blob) | `{ ok: true }`   | During RECORDING (until 3s after the window); ≤2 MB; one per player per round. Format sniffed from the bytes: webm, ogg, wav, mp4/m4a, mp3 |
+| `GET`  | `/api/rooms/:code/audio/:fileId`           |                            | audio bytes      | Recordings and custom sounds                                                                                                               |
+| `GET`  | `/sounds/default/:file`                    |                            | audio bytes      | Static default pack, public                                                                                                                |
 
 ### Error codes
 
-`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`.
+`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `SPECTATOR`.
+
+HTTP errors use the same codes in `{ ok: false, error }`, with status 401 (no seat), 409 (wrong phase, already submitted), 403 (spectator), 413 (too large) or 415 (format).

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { RoomCodeSchema } from '@cyrp/shared';
+import { GameView } from '../components/game/GameView';
 import { Lobby } from '../components/Lobby';
 import { ProfileFields, useProfile } from '../components/ProfileFields';
 import { Button, Card, ErrorText, Page } from '../components/ui';
@@ -15,7 +16,9 @@ export function RoomPage() {
   const notice = useGame((s) => s.notice);
 
   if (notice) return <Navigate to="/" replace />;
-  if (room?.code === code) return <Lobby room={room} />;
+  if (room?.code === code) {
+    return room.phase === 'LOBBY' ? <Lobby room={room} /> : <GameView room={room} />;
+  }
   if (resuming) {
     return (
       <Page>

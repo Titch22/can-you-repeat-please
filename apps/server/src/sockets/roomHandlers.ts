@@ -5,6 +5,7 @@ import {
   RoomCreatePayload,
   RoomJoinPayload,
   RoomResumePayload,
+  VotePayload,
   SetVoiceMutedPayload,
   TimeSyncPayload,
   UpdateSettingsPayload,
@@ -12,6 +13,7 @@ import {
   type ClientToServerEvents,
   type ServerToClientEvents,
 } from '@cyrp/shared';
+import type { GameRunner } from '../game/GameRunner.js';
 import { RoomError, type RoomManager } from '../rooms/RoomManager.js';
 
 export interface SocketData {
@@ -44,6 +46,7 @@ function handler<S extends z.ZodType, R extends object>(
 }
 
 export interface HandlerDeps {
+  game: GameRunner;
   setVoiceMuted(code: string, muted: boolean): Promise<void>;
   /** Registers debug-only events. */
   debug: boolean;
@@ -115,6 +118,30 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
       handler(KickPayload, ({ playerId: targetId }) => {
         const { code, playerId } = membership();
         rooms.kick(code, playerId, targetId);
+      }),
+    );
+
+    socket.on(
+      'game:start',
+      handler(Empty, () => {
+        const { code, playerId } = membership();
+        deps.game.start(code, playerId);
+      }),
+    );
+
+    socket.on(
+      'game:vote',
+      handler(VotePayload, ({ clipIds }) => {
+        const { code, playerId } = membership();
+        deps.game.vote(code, playerId, clipIds);
+      }),
+    );
+
+    socket.on(
+      'game:backToLobby',
+      handler(Empty, () => {
+        const { code, playerId } = membership();
+        deps.game.backToLobby(code, playerId);
       }),
     );
 

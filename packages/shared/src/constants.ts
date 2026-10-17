@@ -9,7 +9,8 @@ export const MAX_RECORDING_MS = 10_000;
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const MAX_CUSTOM_SOUND_MS = 10_000;
 export const MAX_CUSTOM_SOUNDS_PER_PLAYER = 5;
-export const RECORDING_UPLOAD_GRACE_MS = 5_000;
+/** How long after the recording window uploads are still accepted. */
+export const RECORDING_UPLOAD_GRACE_MS = 3_000;
 
 export const ALLOWED_AUDIO_MIME = [
   'audio/mpeg',

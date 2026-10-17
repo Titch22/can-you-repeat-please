@@ -24,7 +24,11 @@ interface VoiceStore {
   peers: Record<string, PeerVoice>;
   /** Per-player playback volume, 0–1. */
   volumes: Record<string, number>;
+  /** Voice turned down so game sounds stay audible (reference and playback phases). */
+  ducked: boolean;
 }
+
+const DUCKED_FACTOR = 0.25;
 
 export const useVoice = create<VoiceStore>(() => ({
   status: 'idle',
@@ -35,7 +39,17 @@ export const useVoice = create<VoiceStore>(() => ({
   audioBlocked: false,
   peers: {},
   volumes: {},
+  ducked: false,
 }));
+
+function effectiveVolume(identity: string) {
+  const { volumes, ducked } = useVoice.getState();
+  return (volumes[identity] ?? 1) * (ducked ? DUCKED_FACTOR : 1);
+}
+
+function applyVolumes() {
+  for (const p of room?.remoteParticipants.values() ?? []) p.setVolume(effectiveVolume(p.identity));
+}
 
 let room: Room | null = null;
 /** Bumped on every connect/disconnect so a stale async connect can tell it lost the race. */
@@ -83,7 +97,7 @@ function wire(r: Room) {
     const el = track.attach();
     el.dataset.identity = identity;
     audioContainer().appendChild(el);
-    r.remoteParticipants.get(identity)?.setVolume(useVoice.getState().volumes[identity] ?? 1);
+    r.remoteParticipants.get(identity)?.setVolume(effectiveVolume(identity));
   };
 
   r.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
@@ -174,7 +188,13 @@ export function setMicWanted(micWanted: boolean) {
 
 export function setPeerVolume(identity: string, volume: number) {
   useVoice.setState((s) => ({ volumes: { ...s.volumes, [identity]: volume } }));
-  room?.remoteParticipants.get(identity)?.setVolume(volume);
+  room?.remoteParticipants.get(identity)?.setVolume(effectiveVolume(identity));
+}
+
+export function setDucked(ducked: boolean) {
+  if (useVoice.getState().ducked === ducked) return;
+  useVoice.setState({ ducked });
+  applyVolumes();
 }
 
 /** Must run from a click handler when the browser blocked autoplay. */

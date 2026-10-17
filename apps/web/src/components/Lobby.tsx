@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { MIN_PLAYERS, type RoomState } from '@cyrp/shared';
-import { leaveRoom } from '../lib/actions';
+import { leaveRoom, startGame } from '../lib/actions';
+import { errorMessage } from '../lib/errors';
 import { useGame } from '../store';
 import { PlayerList } from './PlayerList';
 import { SettingsPanel } from './SettingsPanel';
 import { VoiceBar } from './VoiceBar';
-import { Button, Page } from './ui';
+import { Button, ErrorText, Page } from './ui';
 
 export function Lobby({ room }: { room: RoomState }) {
   const navigate = useNavigate();
@@ -14,6 +15,14 @@ export function Lobby({ room }: { room: RoomState }) {
   const connected = useGame((s) => s.connected);
   const amHost = room.players.some((p) => p.id === meId && p.isHost);
   const [copied, setCopied] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const enoughPlayers = room.players.filter((p) => p.connected).length >= MIN_PLAYERS;
+
+  const start = async () => {
+    setStartError(null);
+    const ack = await startGame();
+    if (!ack.ok) setStartError(errorMessage(ack.error));
+  };
 
   const copyLink = async () => {
     try {
@@ -65,14 +74,19 @@ export function Lobby({ room }: { room: RoomState }) {
       <footer className="flex flex-col items-center gap-2">
         {amHost ? (
           <>
-            <Button className="w-full max-w-xs py-3 text-lg" disabled>
+            <Button
+              className="w-full max-w-xs py-3 text-lg"
+              disabled={!enoughPlayers}
+              onClick={() => void start()}
+            >
               Start game
             </Button>
             <p className="text-sm text-slate-400">
-              {room.players.length < MIN_PLAYERS
-                ? `Waiting for at least ${MIN_PLAYERS} players…`
-                : 'The game itself arrives in M3.'}
+              {enoughPlayers
+                ? `${room.settings.rounds} rounds. Have fun!`
+                : `Waiting for at least ${MIN_PLAYERS} players…`}
             </p>
+            <ErrorText>{startError}</ErrorText>
           </>
         ) : (
           <p className="text-slate-400">Waiting for the host to start the game…</p>

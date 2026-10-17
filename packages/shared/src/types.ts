@@ -22,15 +22,21 @@ export interface SoundRef {
   uploadedBy?: string;
 }
 
-export interface Clip {
-  id: string;
+/** One entry of the playback queue: the reference again, then each recording, anonymously. */
+export interface PlaybackItem {
+  kind: 'reference' | 'clip';
+  /** Set for clips; what votes refer to. */
+  clipId: string | null;
   url: string;
+  durationMs: number;
 }
 
 export interface RoundResult {
   clipId: string;
   playerId: string;
+  /** Votes received this round. */
   votes: number;
+  url: string;
 }
 
 export interface RoomState {
@@ -41,11 +47,24 @@ export interface RoomState {
   phase: Phase;
   /** True while voice chat is muted by the game (recording phase). */
   voiceMuted: boolean;
+  /** End of the current phase, server epoch ms. Null when the phase has no time limit. */
   deadline: number | null;
+  /** 1-based; 0 in the lobby. */
   round: number;
+  /** The sound to imitate, played for everyone at `startsAt`. */
   reference: (SoundRef & { startsAt: number }) | null;
-  playback: { clips: Clip[]; index: number; startsAt: number } | null;
+  /** Recording window (after the 3-2-1 countdown). */
+  recording: { startsAt: number; endsAt: number } | null;
+  /** Players whose recording arrived this round. */
+  submittedPlayerIds: string[];
+  /** Playback queue; item `index` starts at `startsAt`. */
+  playback: { items: PlaybackItem[]; index: number; startsAt: number } | null;
+  /** Clips of this round, in playback order (anonymous until results). */
+  clips: { id: string; url: string; durationMs: number }[];
+  /** The viewer's own clip this round, which they can't vote for. */
+  myClipId: string | null;
   myVotes: string[];
+  /** Who has voted (not what they voted for). */
   votedPlayerIds: string[];
   roundResults: RoundResult[] | null;
 }
@@ -64,6 +83,9 @@ export type ErrorCode =
   | 'TOO_MANY_SOUNDS'
   | 'ALREADY_SUBMITTED'
   | 'CANNOT_VOTE_SELF'
-  | 'TOO_MANY_VOTES';
+  | 'TOO_MANY_VOTES'
+  | 'NOT_ENOUGH_PLAYERS'
+  | 'NOT_ENOUGH_SOUNDS'
+  | 'SPECTATOR';
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode };

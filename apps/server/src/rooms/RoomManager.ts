@@ -11,6 +11,7 @@ import {
   type Settings,
   type SoundRef,
 } from '@cyrp/shared';
+import { clipUrl, type GameState } from '../game/state.js';
 
 export class RoomError extends Error {
   constructor(public readonly code: ErrorCode) {
@@ -40,7 +41,17 @@ export interface Room {
   phase: Phase;
   /** Voice chat muted by the game: new voice tokens are minted without publish rights. */
   voiceMuted: boolean;
+  /** Game in progress; null in the lobby. */
+  game: GameState | null;
+  /** Audio stored for this room (recordings, uploads), by file id. */
+  files: Map<string, StoredFile>;
   lastActivity: number;
+}
+
+export interface StoredFile {
+  path: string;
+  mime: string;
+  kind: 'recording' | 'sound';
 }
 
 export type RemoveReason = 'left' | 'kicked' | 'timeout';
@@ -49,6 +60,8 @@ export interface RoomManagerHooks {
   onCreated?(room: Room): void;
   onChanged?(room: Room): void;
   onPlayerRemoved?(room: Room, player: ServerPlayer, reason: RemoveReason): void;
+  /** Someone disconnected, reconnected or left (the room still exists). */
+  onPresenceChanged?(room: Room): void;
   /** Called before the room is forgotten, so `room.players` still lists who to notify. */
   onClosed?(room: Room, reason: 'empty' | 'idle'): void;
 }
@@ -89,6 +102,8 @@ export class RoomManager {
       customSounds: [],
       phase: 'LOBBY',
       voiceMuted: false,
+      game: null,
+      files: new Map(),
       lastActivity: this.now(),
     };
     this.rooms.set(room.code, room);
@@ -118,6 +133,7 @@ export class RoomManager {
     player.graceTimer = null;
     player.socketId = socketId;
     this.touch(room);
+    this.hooks.onPresenceChanged?.(room);
     return { room, player };
   }
 
@@ -129,6 +145,7 @@ export class RoomManager {
     player.socketId = null;
     player.graceTimer = setTimeout(() => this.remove(room, player, 'timeout'), RECONNECT_GRACE_MS);
     this.hooks.onChanged?.(room);
+    this.hooks.onPresenceChanged?.(room);
   }
 
   leave(code: string, playerId: string) {
@@ -166,6 +183,17 @@ export class RoomManager {
     this.assertHost(this.getOrThrow(code), playerId);
   }
 
+  getOrThrow(code: string) {
+    const room = this.rooms.get(code);
+    if (!room) throw new RoomError('ROOM_NOT_FOUND');
+    return room;
+  }
+
+  /** Records activity and broadcasts the room after an outside change (e.g. by the game). */
+  changed(room: Room) {
+    if (this.rooms.get(room.code) === room) this.touch(room);
+  }
+
   /** Closes rooms with no activity for ROOM_IDLE_TIMEOUT_MS. Run periodically. */
   sweepIdle() {
     const now = this.now();
@@ -179,7 +207,7 @@ export class RoomManager {
   }
 
   /** Snapshot sent to one player. Per-viewer because some fields (votes) are private. */
-  toState(room: Room, _viewerId: string): RoomState {
+  toState(room: Room, viewerId: string): RoomState {
     return {
       code: room.code,
       players: room.players.map((p) => ({
@@ -195,14 +223,30 @@ export class RoomManager {
       customSounds: room.customSounds,
       phase: room.phase,
       voiceMuted: room.voiceMuted,
-      deadline: null,
-      round: 0,
-      reference: null,
-      playback: null,
-      myVotes: [],
-      votedPlayerIds: [],
-      roundResults: null,
+      ...this.gameView(room, viewerId),
     };
+  }
+
+  private gameView(room: Room, viewerId: string) {
+    const g = room.game;
+    const showClips = ['PLAYBACK', 'VOTING', 'ROUND_RESULTS'].includes(room.phase);
+    const clipMs = g?.recording ? g.recording.endsAt - g.recording.startsAt : 0;
+    return {
+      deadline: g?.deadline ?? null,
+      round: g?.round ?? 0,
+      reference: g?.reference ?? null,
+      recording: g?.recording ?? null,
+      submittedPlayerIds: g ? [...g.recordings.keys()] : [],
+      playback: g?.playback ?? null,
+      clips:
+        g && showClips
+          ? g.clipOrder.map((id) => ({ id, url: clipUrl(room.code, id), durationMs: clipMs }))
+          : [],
+      myClipId: g?.recordings.get(viewerId)?.clipId ?? null,
+      myVotes: g?.votes.get(viewerId) ?? [],
+      votedPlayerIds: g ? [...g.votes.keys()] : [],
+      roundResults: g?.roundResults ?? null,
+    } satisfies Partial<RoomState>;
   }
 
   private remove(room: Room, player: ServerPlayer, reason: RemoveReason) {
@@ -215,6 +259,7 @@ export class RoomManager {
     }
     if (room.hostId === player.id) room.hostId = room.players[0]!.id;
     this.touch(room);
+    this.hooks.onPresenceChanged?.(room);
   }
 
   private close(room: Room, reason: 'empty' | 'idle') {
@@ -226,12 +271,6 @@ export class RoomManager {
   private touch(room: Room) {
     room.lastActivity = this.now();
     this.hooks.onChanged?.(room);
-  }
-
-  private getOrThrow(code: string) {
-    const room = this.rooms.get(code);
-    if (!room) throw new RoomError('ROOM_NOT_FOUND');
-    return room;
   }
 
   private assertHost(room: Room, playerId: string) {

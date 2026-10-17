@@ -10,7 +10,9 @@ export interface SessionLocals {
  * Guards /api/rooms/:code/* routes: the caller must hold a seat in that room.
  * The token comes from the X-Session-Token header, or `?t=` for <audio src> URLs.
  */
-export function requireSession(rooms: RoomManager): RequestHandler<{ code: string }> {
+export function requireSession(
+  rooms: RoomManager,
+): RequestHandler<{ code: string } & Record<string, string>> {
   return (req, res, next) => {
     const token =
       req.get('X-Session-Token') ?? (typeof req.query.t === 'string' ? req.query.t : '');

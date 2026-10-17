@@ -21,6 +21,19 @@ export function createAudioStorage(rootDir: string) {
     async deleteRoom(code: string) {
       await fs.rm(roomDir(code), { recursive: true, force: true });
     },
+
+    /** Writes `data` as `name` in the room dir and returns its absolute path. */
+    async saveFile(code: string, name: string, data: Buffer) {
+      if (path.basename(name) !== name) throw new Error(`invalid file name: ${name}`);
+      await fs.mkdir(roomDir(code), { recursive: true });
+      const file = path.join(roomDir(code), name);
+      await fs.writeFile(file, data);
+      return file;
+    },
+
+    async deleteFile(file: string) {
+      await fs.rm(file, { force: true });
+    },
   };
 }
 

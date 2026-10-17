@@ -38,8 +38,7 @@
 
 - Any player can upload sounds in the lobby. Limits: **10 seconds or less**, **2 MB or less**, at most **5 per player**. Accepted formats: mp3, ogg, wav, webm, m4a.
 - Custom sounds belong to the lobby. They are **never stored long-term** and are **deleted when the lobby ends**, that is, when the last player leaves or the room times out.
-- The sound source `custom` needs at least as many uploaded sounds as there are rounds. If there are too few, the host can't start the game until they lower the round count or switch to `mixed`.
-- A sound isn't picked twice in the same game.
+- The game needs at least one sound in the chosen source. A sound isn't picked again until every sound of the source has been used, so short packs still work for long games.
 
 ## Round flow
 

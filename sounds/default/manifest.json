@@ -1,3 +1,148 @@
 {
-  "sounds": []
+  "sounds": [
+    {
+      "id": "air-horn",
+      "file": "air-horn.mp3",
+      "label": "MLG air horn",
+      "durationMs": 2340
+    },
+    {
+      "id": "ba-dum-tss",
+      "file": "ba-dum-tss.mp3",
+      "label": "Ba dum tss",
+      "durationMs": 2060
+    },
+    {
+      "id": "braam",
+      "file": "braam.mp3",
+      "label": "Inception BRAAAM",
+      "durationMs": 4000
+    },
+    {
+      "id": "cartoon-fall",
+      "file": "cartoon-fall.mp3",
+      "label": "Cartoon fall",
+      "durationMs": 2040
+    },
+    {
+      "id": "censor-bleep",
+      "file": "censor-bleep.wav",
+      "label": "Censor bleep",
+      "durationMs": 800
+    },
+    {
+      "id": "cha-ching",
+      "file": "cha-ching.mp3",
+      "label": "Cha-ching!",
+      "durationMs": 3400
+    },
+    {
+      "id": "clown-horn",
+      "file": "clown-horn.mp3",
+      "label": "Clown horn",
+      "durationMs": 1000
+    },
+    {
+      "id": "crickets",
+      "file": "crickets.mp3",
+      "label": "Awkward crickets",
+      "durationMs": 3000
+    },
+    {
+      "id": "dial-up",
+      "file": "dial-up.mp3",
+      "label": "Dial-up internet",
+      "durationMs": 6000
+    },
+    {
+      "id": "dramatic-sting",
+      "file": "dramatic-sting.mp3",
+      "label": "Dun dun DUNNN",
+      "durationMs": 5200
+    },
+    {
+      "id": "drum-roll",
+      "file": "drum-roll.mp3",
+      "label": "Drum roll",
+      "durationMs": 5950
+    },
+    {
+      "id": "evil-laugh",
+      "file": "evil-laugh.mp3",
+      "label": "Evil laugh",
+      "durationMs": 5000
+    },
+    {
+      "id": "fart",
+      "file": "fart.mp3",
+      "label": "Fart",
+      "durationMs": 1240
+    },
+    {
+      "id": "funeral-march",
+      "file": "funeral-march.wav",
+      "label": "Funeral march",
+      "durationMs": 4950
+    },
+    {
+      "id": "goat",
+      "file": "goat.mp3",
+      "label": "Screaming goat",
+      "durationMs": 1450
+    },
+    {
+      "id": "hallelujah",
+      "file": "hallelujah.mp3",
+      "label": "Hallelujah",
+      "durationMs": 4500
+    },
+    {
+      "id": "nokia-tune",
+      "file": "nokia-tune.wav",
+      "label": "Nokia ringtone",
+      "durationMs": 3300
+    },
+    {
+      "id": "quack",
+      "file": "quack.mp3",
+      "label": "Quack quack",
+      "durationMs": 1300
+    },
+    {
+      "id": "record-scratch",
+      "file": "record-scratch.mp3",
+      "label": "Record scratch",
+      "durationMs": 440
+    },
+    {
+      "id": "sad-trombone",
+      "file": "sad-trombone.mp3",
+      "label": "Sad trombone",
+      "durationMs": 3680
+    },
+    {
+      "id": "shave-and-a-haircut",
+      "file": "shave-and-a-haircut.wav",
+      "label": "Shave and a haircut",
+      "durationMs": 3260
+    },
+    {
+      "id": "tada",
+      "file": "tada.mp3",
+      "label": "Ta-da!",
+      "durationMs": 1340
+    },
+    {
+      "id": "wilhelm-scream",
+      "file": "wilhelm-scream.mp3",
+      "label": "Wilhelm scream",
+      "durationMs": 1110
+    },
+    {
+      "id": "wolf-whistle",
+      "file": "wolf-whistle.mp3",
+      "label": "Wolf whistle",
+      "durationMs": 940
+    }
+  ]
 }

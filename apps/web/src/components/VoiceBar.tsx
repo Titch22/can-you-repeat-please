@@ -11,7 +11,16 @@ const STATUS: Record<VoiceStatus, { label: string; dot: string }> = {
   error: { label: 'Voice unavailable', dot: 'bg-rose-500' },
 };
 
-export function VoiceBar({ gameMuted, amHost }: { gameMuted: boolean; amHost: boolean }) {
+export function VoiceBar({
+  gameMuted,
+  amHost,
+  compact = false,
+}: {
+  gameMuted: boolean;
+  amHost: boolean;
+  /** In-game: just status and mute, no hints or dev tools. */
+  compact?: boolean;
+}) {
   const { status, micWanted, micOn, micBlocked, audioBlocked } = useVoice();
   const s = STATUS[status];
 
@@ -52,13 +61,15 @@ export function VoiceBar({ gameMuted, amHost }: { gameMuted: boolean; amHost: bo
           Could not reach the voice server. The game still works without voice.
         </p>
       )}
-      <p className="flex items-center gap-2 text-xs text-slate-400">
-        <HeadphonesIcon className="size-4" />
-        Headphones recommended, so the game sounds don’t leak into your mic.
-        {micOn && <span className="sr-only">Your mic is live.</span>}
-      </p>
+      {!compact && (
+        <p className="flex items-center gap-2 text-xs text-slate-400">
+          <HeadphonesIcon className="size-4" />
+          Headphones recommended, so the game sounds don’t leak into your mic.
+          {micOn && <span className="sr-only">Your mic is live.</span>}
+        </p>
+      )}
 
-      {import.meta.env.DEV && amHost && (
+      {import.meta.env.DEV && amHost && !compact && (
         <div className="flex items-center gap-2 border-t border-dashed border-slate-700 pt-3 text-xs text-slate-400">
           <span>Dev:</span>
           <Button
