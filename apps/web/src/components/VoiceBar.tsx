@@ -1,6 +1,8 @@
 import { debugSetVoiceMuted } from '../lib/actions';
 import { enableAudio, setMicWanted, useVoice, type VoiceStatus } from '../lib/voice';
-import { HeadphonesIcon, MicIcon, MicOffIcon } from './icons';
+import { useState } from 'react';
+import { HeadphonesIcon, MicIcon, MicOffIcon, SlidersIcon } from './icons';
+import { MicLevel, MicSettings } from './MicSettings';
 import { Button } from './ui';
 
 const STATUS: Record<VoiceStatus, { label: string; dot: string }> = {
@@ -23,6 +25,11 @@ export function VoiceBar({
 }) {
   const { status, micWanted, micOn, micBlocked, audioBlocked } = useVoice();
   const s = STATUS[status];
+  const [settingsOpen, setSettingsOpen] = useState(loadSettingsOpen);
+  const toggleSettings = () => {
+    setSettingsOpen(!settingsOpen);
+    saveSettingsOpen(!settingsOpen);
+  };
 
   return (
     <section className="flex flex-col gap-3 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
@@ -32,6 +39,16 @@ export function VoiceBar({
           {s.label}
         </span>
         <span className="flex-1" />
+        {!micBlocked && <MicLevel muted={!micWanted || gameMuted} />}
+        <Button
+          variant="ghost"
+          className="flex items-center gap-2 px-3 py-2 text-sm"
+          onClick={toggleSettings}
+          aria-expanded={settingsOpen}
+        >
+          <SlidersIcon className="size-4" />
+          Mic settings
+        </Button>
         <Button
           variant={micWanted ? 'secondary' : 'danger'}
           className="flex items-center gap-2 py-2"
@@ -44,6 +61,7 @@ export function VoiceBar({
         </Button>
       </div>
 
+      {settingsOpen && <MicSettings locked={gameMuted} />}
       {audioBlocked && <Button onClick={() => void enableAudio()}>Click to hear the others</Button>}
       {micBlocked && (
         <p className="text-sm text-rose-300">
@@ -78,4 +96,22 @@ export function VoiceBar({
       )}
     </section>
   );
+}
+
+const SETTINGS_KEY = 'cyrp.micSettingsOpen';
+
+function loadSettingsOpen() {
+  try {
+    return localStorage.getItem(SETTINGS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
+function saveSettingsOpen(open: boolean) {
+  try {
+    localStorage.setItem(SETTINGS_KEY, open ? '1' : '0');
+  } catch {
+    // not remembered, that's fine
+  }
 }

@@ -1,22 +1,21 @@
 import { audioContext } from './audio';
+import { THRESHOLD, createLevelMeter, type LevelMeter } from './levelMeter';
 
 /**
  * Who is speaking, measured in the browser from each voice track's audio level.
  *
  * LiveKit's own detection runs on the server and updates about twice a second with smoothing,
- * so the "speaking" ring lit up late and lingered. Measuring locally reacts within ~50 ms.
+ * so the "speaking" ring lit up late and lingered. Measuring locally reacts within ~50 ms
+ * (see levelMeter.ts, which also keeps short sounds when the tab is in the background).
  */
 
-/** RMS level above which a voice counts as speaking (speech is ~0.05–0.2, room noise < 0.01). */
-const THRESHOLD = 0.02;
+export { THRESHOLD };
 /** Keep "speaking" this long after the last loud sample, so it doesn't flicker between words. */
 const HOLD_MS = 300;
 const TICK_MS = 50;
 
 interface Meter {
-  source: MediaStreamAudioSourceNode;
-  analyser: AnalyserNode;
-  samples: Float32Array<ArrayBuffer>;
+  meter: LevelMeter;
   lastLoud: number;
 }
 
@@ -32,17 +31,13 @@ export function onSpeakingChange(listener: () => void) {
 
 export function watchLevel(id: string, track: MediaStreamTrack) {
   unwatchLevel(id);
-  const ctx = audioContext();
-  const source = ctx.createMediaStreamSource(new MediaStream([track]));
-  const analyser = ctx.createAnalyser();
-  analyser.fftSize = 512;
-  source.connect(analyser);
-  meters.set(id, { source, analyser, samples: new Float32Array(analyser.fftSize), lastLoud: 0 });
+  const meter = createLevelMeter(audioContext(), new MediaStream([track]));
+  meters.set(id, { meter, lastLoud: 0 });
   timer ??= setInterval(tick, TICK_MS);
 }
 
 export function unwatchLevel(id: string) {
-  meters.get(id)?.source.disconnect();
+  meters.get(id)?.meter.disconnect();
   meters.delete(id);
   if (speaking.delete(id)) onChange?.();
   if (meters.size === 0 && timer) {
@@ -69,10 +64,7 @@ function tick() {
   const now = performance.now();
   let changed = false;
   for (const [id, m] of meters) {
-    m.analyser.getFloatTimeDomainData(m.samples);
-    let sum = 0;
-    for (const v of m.samples) sum += v * v;
-    if (Math.sqrt(sum / m.samples.length) > THRESHOLD) m.lastLoud = now;
+    if (m.meter.read().peak > THRESHOLD) m.lastLoud = now;
     const speakingNow = now - m.lastLoud < HOLD_MS;
     if (speakingNow !== speaking.has(id)) {
       changed = true;

@@ -96,18 +96,21 @@ function PlayerRow({
         <label
           className={`flex items-center gap-2 pl-12 text-xs text-slate-400 ${voice ? '' : 'opacity-40'}`}
         >
-          <span className="sr-only">Volume of {p.nickname}</span>
           <span aria-hidden>Vol</span>
           <input
             type="range"
             min={0}
-            max={1}
+            max={3}
             step={0.05}
             value={volume}
             onChange={(e) => setPeerVolume(p.id, Number(e.target.value))}
             disabled={!voice}
-            className="h-1 flex-1 accent-slate-400"
+            aria-label={`Volume of ${p.nickname}`}
+            className={`h-1 flex-1 ${volume > 1 ? 'accent-amber-400' : 'accent-slate-400'}`}
           />
+          <span className="w-10 text-right tabular-nums" data-testid={`volume-${p.nickname}`}>
+            {Math.round(volume * 100)}%
+          </span>
         </label>
       )}
     </li>

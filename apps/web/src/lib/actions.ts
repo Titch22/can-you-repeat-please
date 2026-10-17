@@ -1,6 +1,7 @@
 import type { Ack, ErrorCode, Settings, SoundRef } from '@cyrp/shared';
 import { useGame } from '../store';
 import { socket } from './socket';
+import { releaseMic } from './mic';
 import { loadSession, saveSession, type Profile } from './storage';
 
 const TIMEOUT_MS = 5000;
@@ -53,6 +54,7 @@ export async function resumeSession() {
 
 /** Local cleanup after leaving, being kicked, or the room closing. */
 export function endSession(notice: string | null = null) {
+  void releaseMic();
   saveSession(null);
   useGame.setState({ room: null, playerId: null, resuming: false, notice });
 }

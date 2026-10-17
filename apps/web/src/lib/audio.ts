@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import { serverNow } from './clock';
+import { normalizationGain } from './loudness';
 import { loadSession } from './storage';
 
 /** True when the browser blocks game sound until the user clicks something (autoplay policy). */
 export const useAudioUnlock = create(() => ({ blocked: false }));
 
 let ctx: AudioContext | null = null;
+let limiter: DynamicsCompressorNode | null = null;
 
 /** One shared context: decoded buffers can be scheduled precisely with `start(when)`. */
 export function audioContext() {
@@ -17,6 +19,24 @@ export function audioContext() {
     sync();
   }
   return ctx;
+}
+
+/**
+ * Shared output limiter: normalization boosts quiet sounds, and their peaks must not clip.
+ * A fast, hard compressor at -6 dB catches peaks without lowering the whole sound.
+ */
+function output() {
+  const c = audioContext();
+  if (!limiter) {
+    limiter = c.createDynamicsCompressor();
+    limiter.threshold.value = -6;
+    limiter.knee.value = 0;
+    limiter.ratio.value = 20;
+    limiter.attack.value = 0.003;
+    limiter.release.value = 0.1;
+    limiter.connect(c.destination);
+  }
+  return limiter;
 }
 
 /** Must be called from a click handler. */
@@ -37,7 +57,13 @@ export function downloadUrl(url: string, name: string) {
   return `${authUrl(url)}&download=${encodeURIComponent(name)}`;
 }
 
-const buffers = new Map<string, Promise<AudioBuffer>>();
+/** A decoded sound and the gain that brings it to the common loudness (see loudness.ts). */
+interface LoadedSound {
+  buffer: AudioBuffer;
+  gain: number;
+}
+
+const buffers = new Map<string, Promise<LoadedSound>>();
 
 export function preload(url: string) {
   let buffer = buffers.get(url);
@@ -47,7 +73,13 @@ export function preload(url: string) {
         if (!res.ok) throw new Error(`audio ${res.status}: ${url}`);
         return res.arrayBuffer();
       })
-      .then((data) => audioContext().decodeAudioData(data));
+      .then((data) => audioContext().decodeAudioData(data))
+      .then((decoded) => {
+        const channels = Array.from({ length: decoded.numberOfChannels }, (_, i) =>
+          decoded.getChannelData(i),
+        );
+        return { buffer: decoded, gain: normalizationGain(channels, decoded.sampleRate) };
+      });
     buffer.catch(() => buffers.delete(url)); // let a later call retry
     buffers.set(url, buffer);
   }
@@ -66,7 +98,7 @@ export function playAt(url: string, startsAt: number) {
   let source: AudioBufferSourceNode | null = null;
   let cancelled = false;
   void preload(url)
-    .then((buffer) => {
+    .then(({ buffer, gain }) => {
       if (cancelled) return;
       const c = audioContext();
       if (c.state === 'suspended') void c.resume().catch(() => {});
@@ -74,7 +106,9 @@ export function playAt(url: string, startsAt: number) {
       if (delay < 0 && -delay >= buffer.duration) return;
       source = c.createBufferSource();
       source.buffer = buffer;
-      source.connect(c.destination);
+      const level = c.createGain();
+      level.gain.value = gain;
+      source.connect(level).connect(output());
       if (delay >= 0) source.start(c.currentTime + delay);
       else source.start(0, -delay);
     })

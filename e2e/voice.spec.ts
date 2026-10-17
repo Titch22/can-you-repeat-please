@@ -33,9 +33,9 @@ test('voice lobby: speaking indicator, self-mute, and the game mute', async ({ n
   await expect(micOff(bob, 'Alice')).toHaveCount(0);
 
   // Self-mute is visible to others.
-  await bob.getByRole('button', { name: 'Mute' }).click();
+  await bob.getByRole('button', { name: 'Mute', exact: true }).click();
   await expect(micOff(alice, 'Bob')).toBeVisible();
-  await bob.getByRole('button', { name: 'Unmute' }).click();
+  await bob.getByRole('button', { name: 'Unmute', exact: true }).click();
   await expect(micOff(alice, 'Bob')).toHaveCount(0);
 
   // The game mute silences everyone, then everyone comes back.

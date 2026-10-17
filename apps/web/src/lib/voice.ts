@@ -7,8 +7,9 @@ import {
   type RemoteTrack,
 } from 'livekit-client';
 import { create } from 'zustand';
-import { unlockAudio } from './audio';
-import { getMicStream, releaseMic } from './mic';
+import { audioContext, unlockAudio } from './audio';
+import { useDevices } from './devices';
+import { getMicStream, onMicChange } from './mic';
 import {
   isMeasured,
   isSpeaking,
@@ -74,6 +75,59 @@ let room: Room | null = null;
  * stopped, so LiveKit never asks the browser for the mic again.
  */
 let micTrack: LocalAudioTrack | null = null;
+/**
+ * Mic boost for voice: shared mic → gain (micBoost) → limiter → the track we publish.
+ * Without auto gain on the mic (see mic.ts), quiet mics need it. Recordings stay raw: they're
+ * loudness-normalized at playback anyway.
+ */
+let boost: { source: MediaStreamAudioSourceNode; gain: GainNode } | null = null;
+
+/**
+ * The track to publish for `stream`: boosted through Web Audio, or, while the browser hasn't
+ * allowed audio yet (a suspended context would only output silence), a plain clone that gets
+ * swapped for the boosted track once audio is unlocked.
+ */
+function voiceTrackFor(stream: MediaStream): MediaStreamTrack {
+  boost?.source.disconnect();
+  boost = null;
+  const ctx = audioContext();
+  if (ctx.state !== 'running') {
+    ctx.addEventListener('statechange', upgradeWhenUnlocked);
+    return stream.getAudioTracks()[0]!.clone();
+  }
+  const source = ctx.createMediaStreamSource(stream);
+  const gain = ctx.createGain();
+  gain.gain.value = useDevices.getState().micBoost;
+  const limiter = ctx.createDynamicsCompressor();
+  limiter.threshold.value = -3;
+  limiter.knee.value = 0;
+  limiter.ratio.value = 20;
+  limiter.attack.value = 0.003;
+  limiter.release.value = 0.1;
+  const out = ctx.createMediaStreamDestination();
+  source.connect(gain).connect(limiter).connect(out);
+  boost = { source, gain };
+  return out.stream.getAudioTracks()[0]!;
+}
+
+function upgradeWhenUnlocked() {
+  const ctx = audioContext();
+  if (ctx.state !== 'running') return;
+  ctx.removeEventListener('statechange', upgradeWhenUnlocked);
+  if (micTrack && !boost) {
+    void getMicStream().then((stream) => {
+      micQueue = micQueue.then(() => replaceMic(stream)).catch(() => {});
+    });
+  }
+}
+
+// Moving the boost slider just changes the gain: no new track.
+useDevices.subscribe((state, prev) => {
+  if (state.micBoost !== prev.micBoost && boost) {
+    boost.gain.gain.setTargetAtTime(state.micBoost, audioContext().currentTime, 0.02);
+  }
+});
+
 /** Bumped on every connect/disconnect so a stale async connect can tell it lost the race. */
 let generation = 0;
 
@@ -113,6 +167,30 @@ function applyMic() {
   return micQueue;
 }
 
+/**
+ * The player picked another mic: swap the track under the published voice track (no
+ * republish, no new prompt), keeping the mute state. Queued with syncMic.
+ */
+onMicChange((stream) => {
+  micQueue = micQueue
+    .then(() => replaceMic(stream))
+    .catch((err) => {
+      console.warn('[voice] switching mic failed', err);
+    });
+});
+
+async function replaceMic(stream: MediaStream) {
+  const r = room;
+  if (!r || !micTrack) return; // not created yet: syncMic will use the new stream
+  const previous = micTrack.mediaStreamTrack;
+  const muted = micTrack.isMuted;
+  await micTrack.replaceTrack(voiceTrackFor(stream), true);
+  if (muted) micTrack.mediaStreamTrack.enabled = false;
+  if (previous !== micTrack.mediaStreamTrack) previous.stop();
+  watchLevel(r.localParticipant.identity, micTrack.mediaStreamTrack);
+  refresh();
+}
+
 async function syncMic() {
   const r = room;
   if (!r) return;
@@ -124,9 +202,8 @@ async function syncMic() {
       if (micTrack && published) await r.localParticipant.unpublishTrack(micTrack, false);
     } else if (micWanted) {
       if (!micTrack) {
-        const source = (await getMicStream()).getAudioTracks()[0]!;
-        // A clone, so muting voice never silences the recorder, which uses the original.
-        micTrack = new LocalAudioTrack(source.clone(), undefined, true);
+        // Never the shared track itself: muting voice must not silence the recorder.
+        micTrack = new LocalAudioTrack(voiceTrackFor(await getMicStream()), undefined, true);
       }
       if (!published) {
         await r.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone });
@@ -209,8 +286,15 @@ export async function connectVoice(code: string, sessionToken: string) {
     const { url, token } = (await res.json()) as { url: string; token: string };
     if (gen !== generation) return;
 
-    // Keep our mic track alive when the server unpublishes it (game mute).
-    const r = new Room({ adaptiveStream: true, dynacast: true, stopLocalTrackOnUnpublish: false });
+    const r = new Room({
+      adaptiveStream: true,
+      dynacast: true,
+      // Keep our mic track alive when the server unpublishes it (game mute).
+      stopLocalTrackOnUnpublish: false,
+      // Play voices through Web Audio on our shared context: per-player volume can then go
+      // above 100% (an <audio> element caps at 1), and one click unlocks voices and game sounds.
+      webAudioMix: { audioContext: audioContext() },
+    });
     room = r;
     wire(r);
     await r.connect(url, token);
@@ -236,9 +320,12 @@ export async function disconnectVoice() {
   useVoice.setState({ status: 'idle', micOn: false, peers: {}, audioBlocked: false });
   if (r) await r.disconnect();
   unwatchAll();
+  // Only our voice track: the shared mic itself stays open until the player leaves the room
+  // (endSession), so a voice reconnect never asks the browser for the mic again.
   micTrack?.stop();
   micTrack = null;
-  await releaseMic();
+  boost?.source.disconnect();
+  boost = null;
   document.getElementById('voice-audio')?.replaceChildren();
 }
 

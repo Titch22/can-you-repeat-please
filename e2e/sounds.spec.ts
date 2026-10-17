@@ -77,7 +77,10 @@ test('upload a sound, pick only uploads, and play it as the round sound', async 
   await expect(box).not.toBeChecked();
   await alice.getByRole('button', { name: 'Only uploads' }).click();
   await expect(bob.getByTestId('sound-count')).toHaveText(/^1 of \d+ in the game$/);
-  await expect(bob.getByLabel('Use “MLG air horn” in the game')).not.toBeChecked();
+  // Pack-independent: Moo moo is the only ticked sound.
+  await expect(bob.getByTestId('sound-grid').getByRole('checkbox', { checked: true })).toHaveCount(
+    1,
+  );
 
   await alice.getByLabel('Rounds').fill('1');
   await alice.getByRole('button', { name: 'Start game' }).click();

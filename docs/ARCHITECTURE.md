@@ -61,6 +61,7 @@ LOBBY ─start─► ROUND_INTRO ─► REFERENCE ─► RECORDING ─► PLAYBA
 - On connect, the client pings the server a few times (`time:sync`) and keeps the median clock offset.
 - Countdowns and "start playing at T" use the server clock adjusted by that offset.
 - **Reference** and **playback** clips are scheduled at a server timestamp (`startsAt`). Clients preload the audio files when the phase starts and play them at `startsAt`. This keeps everyone hearing the same clip within a few tens of ms.
+- **Loudness:** every game sound (default pack, uploads, recordings) is normalized in the browser when decoded: a gated RMS (50 ms windows, -50 dBFS gate) sets a gain toward -20 dBFS, capped at 6x so near-silent recordings don't become loud noise, and a shared limiter catches the peaks. See `apps/web/src/lib/loudness.ts`.
 - **Playback** has a sub-index (`playbackIndex`), advanced by the server, so all players hear the same clip at the same time.
 
 ### Phase timings
@@ -76,6 +77,10 @@ Fixed durations live in `apps/server/src/game/timing.ts`. `GAME_FAST=1` switches
   - When the phase ends, the server sets `canPublish: true` again and the client republishes its mic track if the player hadn't muted themselves.
 - **Leaving:** when a player is kicked or removed, the server also removes them from the LiveKit room, since their voice token would otherwise stay valid. Closing a room deletes its LiveKit room.
 - **Ducking:** during REFERENCE and PLAYBACK, remote voice volume is lowered on the client (default 25%) so the game audio stays audible.
+- **Mic selection and level:** players pick their mic in the voice bar's "Mic settings" (saved per browser). Switching opens the new device once (`setInputDevice` in `apps/web/src/lib/mic.ts`), swaps it in as the shared mic stream and replaces the published voice track (`LocalTrack.replaceTrack`), so there's no republish; later recordings use it too. A live level meter reads the shared stream itself, so it works while muted. It shares `levelMeter.ts` with the speaking ring: each read looks at all the audio since the previous read, so short sounds aren't missed when a background tab's timers are throttled. Output device selection isn't offered: browsers outside Chromium can't route Web Audio (game sounds) to another device.
+- **Loud enough voices:** the mic is captured without auto gain (for recordings), so quiet mics stay quiet. Two fixes:
+  - **Mic boost (sender):** each player can raise their own voice (100–400%, in Mic settings). The published voice track comes from a Web Audio chain: shared mic → gain → limiter → `MediaStreamDestination`. Until the browser allows audio, a plain copy of the mic is published instead (a suspended context would send silence), then swapped. Recordings stay raw; they're loudness-normalized at playback.
+  - **Listener boost:** per-player volume goes up to 300%. Voices play through LiveKit's `webAudioMix` on our shared audio context, so `setVolume` drives a gain node instead of an `<audio>` element, which caps at 1.
 - **Echo:** players on speakers could feed the reference sound back into voice. LiveKit's echo cancellation handles most of it, and ducking helps. Headphones are recommended in the lobby UI.
 
 ## Recording pipeline
