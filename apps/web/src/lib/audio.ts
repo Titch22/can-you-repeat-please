@@ -32,6 +32,11 @@ export function authUrl(url: string) {
   return token ? `${url}?t=${encodeURIComponent(token)}` : url;
 }
 
+/** Link that saves a room recording as "<name>.<ext>" (the server picks the extension). */
+export function downloadUrl(url: string, name: string) {
+  return `${authUrl(url)}&download=${encodeURIComponent(name)}`;
+}
+
 const buffers = new Map<string, Promise<AudioBuffer>>();
 
 export function preload(url: string) {

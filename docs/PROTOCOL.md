@@ -110,7 +110,7 @@ Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessi
 | `POST` | `/api/rooms/:code/voice-token`             |                            | `{ url, token }` | LiveKit URL (`LIVEKIT_PUBLIC_URL`) and a 15-min JWT for room `cyrp-<code>`; no publish right while `voiceMuted`                            |
 | `POST` | `/api/rooms/:code/sounds`                  | multipart `file`, `label`  | `SoundRef`       | Lobby only; ≤2 MB, ≤10s, ≤5 per player                                                                                                     |
 | `POST` | `/api/rooms/:code/rounds/:round/recording` | raw audio bytes (the blob) | `{ ok: true }`   | During RECORDING (until 3s after the window); ≤2 MB; one per player per round. Format sniffed from the bytes: webm, ogg, wav, mp4/m4a, mp3 |
-| `GET`  | `/api/rooms/:code/audio/:fileId`           |                            | audio bytes      | Recordings and custom sounds                                                                                                               |
+| `GET`  | `/api/rooms/:code/audio/:fileId`           |                            | audio bytes      | Recordings and custom sounds. `?download=<name>` sends it as an attachment named `<name>.<ext>`                                            |
 | `GET`  | `/sounds/default/:file`                    |                            | audio bytes      | Static default pack, public                                                                                                                |
 
 ### Error codes

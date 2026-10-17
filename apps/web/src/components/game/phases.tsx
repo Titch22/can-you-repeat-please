@@ -2,11 +2,11 @@ import { useEffect, useState } from 'react';
 import { MAX_VOTES_PER_PLAYER, type Player, type RoomState } from '@cyrp/shared';
 import { useRecorder, type RecorderStatus } from '../../hooks/useRecorder';
 import { backToLobby, castVote } from '../../lib/actions';
-import { playAt, replay } from '../../lib/audio';
+import { downloadUrl, playAt, replay } from '../../lib/audio';
 import { useServerNow } from '../../lib/clock';
 import { errorMessage } from '../../lib/errors';
 import { Button, ErrorText } from '../ui';
-import { Avatar, PlayButton, ProgressBar } from './bits';
+import { Avatar, DownloadButton, PlayButton, ProgressBar } from './bits';
 
 interface PhaseProps {
   room: RoomState;
@@ -21,6 +21,11 @@ function authorOf(room: RoomState, playerId: string | null) {
       color: '#64748b',
     }
   );
+}
+
+/** "Bob - Screaming goat": the name a downloaded recording is saved under. */
+function recordingName(room: RoomState, author: { nickname: string }) {
+  return `${author.nickname} - ${room.reference?.label ?? 'recording'}`;
 }
 
 /** Plays `url` for everyone at `startsAt` (server time) while mounted. */
@@ -219,6 +224,10 @@ export function VotingPhase({ room, me }: PhaseProps) {
                 {author.nickname}
                 {mine && <span className="ml-2 text-sm font-normal text-slate-400">(you)</span>}
               </span>
+              <DownloadButton
+                href={downloadUrl(clip.url, recordingName(room, author))}
+                label={`Download ${author.nickname}’s attempt`}
+              />
               {canVote && !mine && (
                 <Button
                   variant={isSelected ? 'primary' : 'secondary'}
@@ -274,6 +283,10 @@ export function RoundResultsPhase({ room }: PhaseProps) {
               />
               <Avatar player={author} />
               <span className="flex-1 truncate font-semibold">{author.nickname}</span>
+              <DownloadButton
+                href={downloadUrl(r.url, recordingName(room, author))}
+                label={`Download ${author.nickname}’s attempt`}
+              />
               <span className="font-bold tabular-nums">
                 +{r.votes} {r.votes === 1 ? 'vote' : 'votes'}
               </span>

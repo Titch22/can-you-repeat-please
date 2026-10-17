@@ -60,3 +60,28 @@ export function PlayButton({ onClick, label }: { onClick: () => void; label: str
     </button>
   );
 }
+
+export function DownloadButton({ href, label }: { href: string; label: string }) {
+  return (
+    <a
+      href={href}
+      download
+      aria-label={label}
+      title={label}
+      className="grid size-9 shrink-0 place-items-center rounded-full bg-slate-700 text-slate-100 transition hover:bg-slate-600"
+    >
+      <svg
+        viewBox="0 0 24 24"
+        className="size-4"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M12 4v11M7 10l5 5 5-5M5 20h14" />
+      </svg>
+    </a>
+  );
+}

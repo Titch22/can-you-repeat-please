@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import path from 'node:path';
 import express, { Router, type ErrorRequestHandler } from 'express';
 import { MAX_UPLOAD_BYTES } from '@cyrp/shared';
 import { sniffAudio } from '../audio/formats.js';
@@ -60,6 +61,10 @@ export function audioRoutes(rooms: RoomManager, game: GameRunner, storage: Audio
     }
     res.type(stored.mime);
     res.setHeader('Cache-Control', 'private, max-age=3600');
+    // ?download=<name>: save as "<name>.<ext>" instead of playing inline.
+    if (typeof req.query.download === 'string') {
+      res.attachment(`${safeFileName(req.query.download)}${path.extname(stored.path)}`);
+    }
     res.sendFile(stored.path);
   });
 
@@ -75,4 +80,16 @@ export function audioRoutes(rooms: RoomManager, game: GameRunner, storage: Audio
   router.use(onError);
 
   return router;
+}
+
+/** A client-suggested file name, made safe for every OS (the extension is added separately). */
+export function safeFileName(name: string) {
+  const cleaned = name
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\\/:*?"<>|\x00-\x1f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 80)
+    .replace(/[. ]+$/, '');
+  return cleaned || 'recording';
 }

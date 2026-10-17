@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { expect, test, type Page } from '@playwright/test';
 
 // A full game takes a while: about a minute with GAME_FAST=1 (when Playwright starts the server),
@@ -61,6 +62,18 @@ test('three players play a 2-round game from lobby back to lobby', async ({ brow
     await expect(phase(alice)).toHaveText('Vote', { timeout: 45_000 });
     for (const name of ['Alice', 'Bob', 'Carol']) {
       await expect(alice.getByTestId('vote-list')).toContainText(name);
+    }
+    if (round === 1) {
+      // Any attempt can be saved, named after its author and the sound.
+      const [download] = await Promise.all([
+        alice.waitForEvent('download'),
+        alice
+          .getByRole('link', { name: /^Download .+’s attempt$/ })
+          .first()
+          .click(),
+      ]);
+      expect(download.suggestedFilename()).toMatch(/^(Alice|Bob|Carol) - .+\.(webm|ogg|m4a)$/);
+      expect(fs.statSync(await download.path()).size).toBeGreaterThan(0);
     }
     for (const page of pages) await voteForSomeoneElse(page);
     for (const page of pages) {

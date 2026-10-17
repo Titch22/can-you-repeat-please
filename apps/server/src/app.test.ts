@@ -317,5 +317,12 @@ describe('recordings over HTTP', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/^audio\/wav/);
     expect((await res.arrayBuffer()).byteLength).toBe(2044);
+
+    // ?download=<name> saves it as an attachment, named safely, with the right extension.
+    const dl = await fetch(
+      `${url}?t=${joined.sessionToken}&download=${encodeURIComponent('Bob - Goat/../x')}`,
+    );
+    expect(dl.status).toBe(200);
+    expect(dl.headers.get('content-disposition')).toBe('attachment; filename="Bob - Goat..x.wav"');
   }, 15_000);
 });
