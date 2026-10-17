@@ -1,148 +1,202 @@
 {
   "sounds": [
     {
-      "id": "air-horn",
-      "file": "air-horn.mp3",
-      "label": "MLG air horn",
-      "durationMs": 2340
+      "id": "2-hours-later",
+      "file": "2 hours later.mp3",
+      "label": "2 hours later",
+      "durationMs": 1910
     },
     {
-      "id": "ba-dum-tss",
-      "file": "ba-dum-tss.mp3",
-      "label": "Ba dum tss",
-      "durationMs": 2060
+      "id": "a-few-moments-later",
+      "file": "a few moments later.mp3",
+      "label": "a few moments later",
+      "durationMs": 1760
     },
     {
-      "id": "braam",
-      "file": "braam.mp3",
-      "label": "Inception BRAAAM",
-      "durationMs": 4000
+      "id": "aaaaaaaaaaaaaa",
+      "file": "aaaaaaaaaaaaaa.mp3",
+      "label": "aaaaaaaaaaaaaa",
+      "durationMs": 1920
     },
     {
-      "id": "cartoon-fall",
-      "file": "cartoon-fall.mp3",
-      "label": "Cartoon fall",
-      "durationMs": 2040
+      "id": "badum-tsss",
+      "file": "badum tsss.mp3",
+      "label": "badum tsss",
+      "durationMs": 1890
     },
     {
-      "id": "censor-bleep",
-      "file": "censor-bleep.wav",
-      "label": "Censor bleep",
-      "durationMs": 800
+      "id": "bruh",
+      "file": "bruh.mp3",
+      "label": "bruh",
+      "durationMs": 480
     },
     {
-      "id": "cha-ching",
-      "file": "cha-ching.mp3",
-      "label": "Cha-ching!",
-      "durationMs": 3400
+      "id": "do-it",
+      "file": "DO IT.mp3",
+      "label": "DO IT",
+      "durationMs": 960
     },
     {
-      "id": "clown-horn",
-      "file": "clown-horn.mp3",
-      "label": "Clown horn",
-      "durationMs": 1000
+      "id": "fbi-open-up",
+      "file": "fbi open up.mp3",
+      "label": "fbi open up",
+      "durationMs": 2070
     },
     {
-      "id": "crickets",
-      "file": "crickets.mp3",
-      "label": "Awkward crickets",
-      "durationMs": 3000
+      "id": "hello-there",
+      "file": "hello there.mp3",
+      "label": "hello there",
+      "durationMs": 670
     },
     {
-      "id": "dial-up",
-      "file": "dial-up.mp3",
-      "label": "Dial-up internet",
-      "durationMs": 6000
+      "id": "inception-horn",
+      "file": "inception horn.mp3",
+      "label": "inception horn",
+      "durationMs": 5700
     },
     {
-      "id": "dramatic-sting",
-      "file": "dramatic-sting.mp3",
-      "label": "Dun dun DUNNN",
-      "durationMs": 5200
+      "id": "mario-jumping",
+      "file": "Mario jumping.mp3",
+      "label": "Mario jumping",
+      "durationMs": 720
     },
     {
-      "id": "drum-roll",
-      "file": "drum-roll.mp3",
-      "label": "Drum roll",
-      "durationMs": 5950
+      "id": "no-god-please-no",
+      "file": "no god please no.mp3",
+      "label": "no god please no",
+      "durationMs": 6320
     },
     {
-      "id": "evil-laugh",
-      "file": "evil-laugh.mp3",
-      "label": "Evil laugh",
-      "durationMs": 5000
+      "id": "ook",
+      "file": "Ook.mp3",
+      "label": "Ook",
+      "durationMs": 580
     },
     {
-      "id": "fart",
-      "file": "fart.mp3",
-      "label": "Fart",
-      "durationMs": 1240
+      "id": "ooof",
+      "file": "OOOF.mp3",
+      "label": "OOOF",
+      "durationMs": 360
     },
     {
-      "id": "funeral-march",
-      "file": "funeral-march.wav",
-      "label": "Funeral march",
-      "durationMs": 4950
+      "id": "oooo-my-god",
+      "file": "Oooo my god.mp3",
+      "label": "Oooo my god",
+      "durationMs": 1850
     },
     {
-      "id": "goat",
-      "file": "goat.mp3",
-      "label": "Screaming goat",
-      "durationMs": 1450
+      "id": "ooooooooooo",
+      "file": "Ooooooooooo.mp3",
+      "label": "Ooooooooooo",
+      "durationMs": 5650
     },
     {
-      "id": "hallelujah",
-      "file": "hallelujah.mp3",
-      "label": "Hallelujah",
-      "durationMs": 4500
+      "id": "thats-pretty-good",
+      "file": "thats pretty good.mp3",
+      "label": "thats pretty good",
+      "durationMs": 3180
     },
     {
-      "id": "nokia-tune",
-      "file": "nokia-tune.wav",
-      "label": "Nokia ringtone",
-      "durationMs": 3300
+      "id": "tu-as-ce-que-je-t-ai-demande",
+      "file": "Tu as ce que je t'ai demandé .mp3",
+      "label": "Tu as ce que je t'ai demandé",
+      "durationMs": 2744
     },
     {
-      "id": "quack",
-      "file": "quack.mp3",
-      "label": "Quack quack",
-      "durationMs": 1300
+      "id": "tu-etais-l-elu",
+      "file": "TU ETAIS L'ELU.mp3",
+      "label": "TU ETAIS L'ELU",
+      "durationMs": 9000
     },
     {
-      "id": "record-scratch",
-      "file": "record-scratch.mp3",
-      "label": "Record scratch",
-      "durationMs": 440
+      "id": "userious",
+      "file": "userious .mp3",
+      "label": "userious",
+      "durationMs": 8520
     },
     {
-      "id": "sad-trombone",
-      "file": "sad-trombone.mp3",
-      "label": "Sad trombone",
-      "durationMs": 3680
+      "id": "vomit",
+      "file": "vomit.mp3",
+      "label": "vomit",
+      "durationMs": 3150
     },
     {
-      "id": "shave-and-a-haircut",
-      "file": "shave-and-a-haircut.wav",
-      "label": "Shave and a haircut",
-      "durationMs": 3260
+      "id": "wait-a-minute",
+      "file": "WAIT A MINUTE.mp3",
+      "label": "WAIT A MINUTE",
+      "durationMs": 3840
     },
     {
-      "id": "tada",
-      "file": "tada.mp3",
-      "label": "Ta-da!",
-      "durationMs": 1340
+      "id": "waoww",
+      "file": "waoww.mp3",
+      "label": "waoww",
+      "durationMs": 3750
     },
     {
-      "id": "wilhelm-scream",
-      "file": "wilhelm-scream.mp3",
-      "label": "Wilhelm scream",
-      "durationMs": 1110
+      "id": "wasted",
+      "file": "wasted.mp3",
+      "label": "wasted",
+      "durationMs": 7010
     },
     {
-      "id": "wolf-whistle",
-      "file": "wolf-whistle.mp3",
-      "label": "Wolf whistle",
-      "durationMs": 940
+      "id": "weeeeeeeeeee",
+      "file": "weeeeeeeeeee.mp3",
+      "label": "weeeeeeeeeee",
+      "durationMs": 6200
+    },
+    {
+      "id": "well-be-right-back",
+      "file": "well be right back.mp3",
+      "label": "well be right back",
+      "durationMs": 2590
+    },
+    {
+      "id": "why-are-you-running",
+      "file": "why are you running.mp3",
+      "label": "why are you running",
+      "durationMs": 2760
+    },
+    {
+      "id": "wilhelm",
+      "file": "wilhelm.mp3",
+      "label": "wilhelm",
+      "durationMs": 1370
+    },
+    {
+      "id": "windows-power-off-2",
+      "file": "windows power off (2).mp3",
+      "label": "windows power off (2)",
+      "durationMs": 4240
+    },
+    {
+      "id": "windows-power-off",
+      "file": "Windows power off.mp3",
+      "label": "Windows power off",
+      "durationMs": 4230
+    },
+    {
+      "id": "yeaaaaaaaaaaah",
+      "file": "YEAAAAAAAAAAAH.mp3",
+      "label": "YEAAAAAAAAAAAH",
+      "durationMs": 6780
+    },
+    {
+      "id": "yeaayh",
+      "file": "YEAAYH.mp3",
+      "label": "YEAAYH",
+      "durationMs": 660
+    },
+    {
+      "id": "yeee-booii",
+      "file": "yeee booii.mp3",
+      "label": "yeee booii",
+      "durationMs": 1310
+    },
+    {
+      "id": "yes-indeed",
+      "file": "YES INDEED.mp3",
+      "label": "YES INDEED",
+      "durationMs": 2721
     }
   ]
 }
