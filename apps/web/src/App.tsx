@@ -1,10 +1,12 @@
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { useSocketSync } from './hooks/useSocketSync';
+import { useVoiceConnection } from './hooks/useVoiceConnection';
 import { HomePage } from './pages/HomePage';
 import { RoomPage } from './pages/RoomPage';
 
 export function App() {
   useSocketSync();
+  useVoiceConnection();
   return (
     <BrowserRouter>
       <Routes>

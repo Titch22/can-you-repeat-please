@@ -49,3 +49,4 @@ export const VotePayload = z.object({
   clipIds: z.array(z.string()).max(MAX_VOTES_PER_PLAYER),
 });
 export const TimeSyncPayload = z.object({ clientTime: z.number() });
+export const SetVoiceMutedPayload = z.object({ muted: z.boolean() });

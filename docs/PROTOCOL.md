@@ -51,6 +51,7 @@ interface RoomState {
   settings: Settings;
   customSounds: SoundRef[];
   phase: Phase;
+  voiceMuted: boolean; // voice chat muted by the game (recording)
   deadline: number | null; // server epoch ms
   round: number; // 1-based, 0 in the lobby
   reference: (SoundRef & { startsAt: number }) | null;
@@ -79,6 +80,7 @@ Every event takes an ack callback that receives `{ ok: true, ... } | { ok: false
 | `game:start`          | `{}`                                        |                                    | host, lobby only                                       |
 | `game:vote`           | `{ clipIds: string[] }` (0–2, not your own) |                                    | player, VOTING only; can be re-sent to change the vote |
 | `game:backToLobby`    | `{}`                                        |                                    | host, FINAL_RESULTS only                               |
+| `debug:setVoiceMuted` | `{ muted: boolean }`                        |                                    | host; dev builds only (`NODE_ENV !== 'production'`)    |
 | `time:sync`           | `{ clientTime }`                            | `{ clientTime, serverTime }`       | anyone                                                 |
 
 ### Server → client
@@ -95,14 +97,14 @@ Every event takes an ack callback that receives `{ ok: true, ... } | { ok: false
 
 Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessionToken>`. Routes used as `<audio src>` also accept `?t=<sessionToken>`.
 
-| Method | Route                                      | Body                      | Response         | Notes                                                                    |
-| ------ | ------------------------------------------ | ------------------------- | ---------------- | ------------------------------------------------------------------------ |
-| `GET`  | `/api/health`                              |                           | `{ ok: true }`   |                                                                          |
-| `POST` | `/api/rooms/:code/voice-token`             |                           | `{ url, token }` | LiveKit URL and JWT                                                      |
-| `POST` | `/api/rooms/:code/sounds`                  | multipart `file`, `label` | `SoundRef`       | Lobby only; ≤2 MB, ≤10s, ≤5 per player                                   |
-| `POST` | `/api/rooms/:code/rounds/:round/recording` | multipart `file`          | `{ ok: true }`   | During RECORDING plus a 5s grace period; ≤2 MB; one per player per round |
-| `GET`  | `/api/rooms/:code/audio/:fileId`           |                           | audio bytes      | Recordings and custom sounds                                             |
-| `GET`  | `/sounds/default/:file`                    |                           | audio bytes      | Static default pack, public                                              |
+| Method | Route                                      | Body                      | Response         | Notes                                                                                                           |
+| ------ | ------------------------------------------ | ------------------------- | ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/health`                              |                           | `{ ok: true }`   |                                                                                                                 |
+| `POST` | `/api/rooms/:code/voice-token`             |                           | `{ url, token }` | LiveKit URL (`LIVEKIT_PUBLIC_URL`) and a 15-min JWT for room `cyrp-<code>`; no publish right while `voiceMuted` |
+| `POST` | `/api/rooms/:code/sounds`                  | multipart `file`, `label` | `SoundRef`       | Lobby only; ≤2 MB, ≤10s, ≤5 per player                                                                          |
+| `POST` | `/api/rooms/:code/rounds/:round/recording` | multipart `file`          | `{ ok: true }`   | During RECORDING plus a 5s grace period; ≤2 MB; one per player per round                                        |
+| `GET`  | `/api/rooms/:code/audio/:fileId`           |                           | audio bytes      | Recordings and custom sounds                                                                                    |
+| `GET`  | `/sounds/default/:file`                    |                           | audio bytes      | Static default pack, public                                                                                     |
 
 ### Error codes
 

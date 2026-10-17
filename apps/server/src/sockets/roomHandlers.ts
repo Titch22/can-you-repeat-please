@@ -5,6 +5,7 @@ import {
   RoomCreatePayload,
   RoomJoinPayload,
   RoomResumePayload,
+  SetVoiceMutedPayload,
   TimeSyncPayload,
   UpdateSettingsPayload,
   type Ack,
@@ -26,14 +27,14 @@ const Empty = z.object({});
 /** Validates the payload, runs `fn`, and turns its result or RoomError into an ack. */
 function handler<S extends z.ZodType, R extends object>(
   schema: S,
-  fn: (data: z.infer<S>) => R | void,
+  fn: (data: z.infer<S>) => R | void | Promise<R | void>,
 ) {
-  return (payload: unknown, cb: (ack: Ack<R>) => void) => {
+  return async (payload: unknown, cb: (ack: Ack<R>) => void) => {
     if (typeof cb !== 'function') return;
     const parsed = schema.safeParse(payload ?? {});
     if (!parsed.success) return cb({ ok: false, error: 'INVALID_PAYLOAD' });
     try {
-      cb({ ok: true, ...(fn(parsed.data) ?? {}) } as Ack<R>);
+      cb({ ok: true, ...((await fn(parsed.data)) ?? {}) } as Ack<R>);
     } catch (err) {
       if (err instanceof RoomError) return cb({ ok: false, error: err.code });
       console.error('[socket] handler failed', err);
@@ -42,7 +43,13 @@ function handler<S extends z.ZodType, R extends object>(
   };
 }
 
-export function registerRoomHandlers(io: GameServer, rooms: RoomManager) {
+export interface HandlerDeps {
+  setVoiceMuted(code: string, muted: boolean): Promise<void>;
+  /** Registers debug-only events. */
+  debug: boolean;
+}
+
+export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: HandlerDeps) {
   io.on('connection', (socket: GameSocket) => {
     const membership = () => {
       const { code, playerId } = socket.data;
@@ -110,6 +117,17 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager) {
         rooms.kick(code, playerId, targetId);
       }),
     );
+
+    if (deps.debug) {
+      socket.on(
+        'debug:setVoiceMuted',
+        handler(SetVoiceMutedPayload, async ({ muted }) => {
+          const { code, playerId } = membership();
+          rooms.requireHost(code, playerId);
+          await deps.setVoiceMuted(code, muted);
+        }),
+      );
+    }
 
     socket.on(
       'time:sync',

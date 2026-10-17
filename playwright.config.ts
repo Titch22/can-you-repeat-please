@@ -4,12 +4,32 @@ export default defineConfig({
   testDir: './e2e',
   use: {
     baseURL: 'http://localhost:5173',
-    ...devices['Desktop Chrome'],
-    launchOptions: {
-      // Fake mic so game tests can record without hardware or a permission prompt.
-      args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
-    },
   },
+  // WebRTC differs a lot between engines (e.g. Firefox ignores loopback ICE candidates).
+  projects: [
+    {
+      name: 'chromium',
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          // Fake mic (a periodic beep) without hardware or a permission prompt.
+          args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'],
+        },
+      },
+    },
+    {
+      name: 'firefox',
+      use: {
+        ...devices['Desktop Firefox'],
+        launchOptions: {
+          firefoxUserPrefs: {
+            'media.navigator.streams.fake': true,
+            'media.navigator.permission.disabled': true,
+          },
+        },
+      },
+    },
+  ],
   // Two entries so each port is checked: a leftover web server alone must not pass for a full stack.
   webServer: [
     {

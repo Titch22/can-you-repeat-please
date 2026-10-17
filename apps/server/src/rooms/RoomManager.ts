@@ -38,6 +38,8 @@ export interface Room {
   settings: Settings;
   customSounds: SoundRef[];
   phase: Phase;
+  /** Voice chat muted by the game: new voice tokens are minted without publish rights. */
+  voiceMuted: boolean;
   lastActivity: number;
 }
 
@@ -70,6 +72,13 @@ export class RoomManager {
     return this.rooms.get(code);
   }
 
+  /** Authenticates HTTP requests: the player holding `sessionToken` in room `code`, if any. */
+  findBySession(code: string, sessionToken: string) {
+    const room = this.rooms.get(code);
+    const player = room?.players.find((p) => p.sessionToken === sessionToken);
+    return room && player ? { room, player } : null;
+  }
+
   create(nickname: string, color: string, socketId: string) {
     const player = this.newPlayer(nickname, color, socketId, false);
     const room: Room = {
@@ -79,6 +88,7 @@ export class RoomManager {
       settings: { ...DEFAULT_SETTINGS },
       customSounds: [],
       phase: 'LOBBY',
+      voiceMuted: false,
       lastActivity: this.now(),
     };
     this.rooms.set(room.code, room);
@@ -144,6 +154,18 @@ export class RoomManager {
     this.touch(room);
   }
 
+  /** Records the game-wide voice mute. Applying it to LiveKit is the caller's job. */
+  setVoiceMuted(code: string, muted: boolean) {
+    const room = this.getOrThrow(code);
+    room.voiceMuted = muted;
+    this.touch(room);
+    return room;
+  }
+
+  requireHost(code: string, playerId: string) {
+    this.assertHost(this.getOrThrow(code), playerId);
+  }
+
   /** Closes rooms with no activity for ROOM_IDLE_TIMEOUT_MS. Run periodically. */
   sweepIdle() {
     const now = this.now();
@@ -172,6 +194,7 @@ export class RoomManager {
       settings: room.settings,
       customSounds: room.customSounds,
       phase: room.phase,
+      voiceMuted: room.voiceMuted,
       deadline: null,
       round: 0,
       reference: null,

@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "pnpm --parallel --filter ./apps/** dev",
+    "voice:up": "docker compose up -d",
+    "voice:down": "docker compose down",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "eslint .",

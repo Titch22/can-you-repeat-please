@@ -39,6 +39,8 @@ export interface RoomState {
   settings: Settings;
   customSounds: SoundRef[];
   phase: Phase;
+  /** True while voice chat is muted by the game (recording phase). */
+  voiceMuted: boolean;
   deadline: number | null;
   round: number;
   reference: (SoundRef & { startsAt: number }) | null;

@@ -67,3 +67,7 @@ export const updateSettings = (patch: Partial<Settings>) =>
 
 export const kickPlayer = (playerId: string) =>
   call(socket.timeout(TIMEOUT_MS).emitWithAck('room:kick', { playerId }));
+
+/** Dev-only: lets the host test the recording mute before the game loop exists. */
+export const debugSetVoiceMuted = (muted: boolean) =>
+  call(socket.timeout(TIMEOUT_MS).emitWithAck('debug:setVoiceMuted', { muted }));

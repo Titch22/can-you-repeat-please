@@ -29,7 +29,7 @@ See [docs/GAME_DESIGN.md](docs/GAME_DESIGN.md) for the full rules.
 
 Prerequisites: Node 20+ and pnpm 9+. You also need a LiveKit server for voice (from M2 on). Pick one:
 
-- **Docker:** `docker compose up -d`
+- **Docker:** `pnpm voice:up` (stop with `pnpm voice:down`). LiveKit advertises the dev machine's LAN IP (`192.168.1.239`, set in `docker-compose.yml`; override with `LIVEKIT_NODE_IP`). It can't be `127.0.0.1`: Firefox ignores loopback addresses for WebRTC. For the same reason (Firefox), the Vite dev server listens on IPv4 `0.0.0.0`: Firefox never starts WebRTC on pages loaded over IPv6 `[::1]`.
 - **Native binary:** download `livekit-server` from the [LiveKit releases](https://github.com/livekit/livekit/releases) and run `livekit-server --dev`
 - **LiveKit Cloud:** create a free project and put its URL, key and secret in `apps/server/.env`
 

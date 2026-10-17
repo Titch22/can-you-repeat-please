@@ -5,6 +5,7 @@ import type {
   RoomCreatePayload,
   RoomJoinPayload,
   RoomResumePayload,
+  SetVoiceMutedPayload,
   TimeSyncPayload,
   UpdateSettingsPayload,
   VotePayload,
@@ -30,6 +31,8 @@ export interface ClientToServerEvents {
   'game:start': (p: object, cb: Cb) => void;
   'game:vote': (p: z.infer<typeof VotePayload>, cb: Cb) => void;
   'game:backToLobby': (p: object, cb: Cb) => void;
+  /** Dev-only: host toggles the game voice mute, to test it before the game loop exists. */
+  'debug:setVoiceMuted': (p: z.infer<typeof SetVoiceMutedPayload>, cb: Cb) => void;
   'time:sync': (
     p: z.infer<typeof TimeSyncPayload>,
     cb: Cb<{ clientTime: number; serverTime: number }>,

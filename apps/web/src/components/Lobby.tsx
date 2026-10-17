@@ -5,6 +5,7 @@ import { leaveRoom } from '../lib/actions';
 import { useGame } from '../store';
 import { PlayerList } from './PlayerList';
 import { SettingsPanel } from './SettingsPanel';
+import { VoiceBar } from './VoiceBar';
 import { Button, Page } from './ui';
 
 export function Lobby({ room }: { room: RoomState }) {
@@ -53,6 +54,8 @@ export function Lobby({ room }: { room: RoomState }) {
           Connection lost, reconnecting…
         </p>
       )}
+
+      <VoiceBar gameMuted={room.voiceMuted} amHost={amHost} />
 
       <div className="grid gap-4 sm:grid-cols-2">
         <PlayerList players={room.players} meId={meId} amHost={amHost} />

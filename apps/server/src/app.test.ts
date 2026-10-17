@@ -2,17 +2,27 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AddressInfo } from 'node:net';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { io as ioClient, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, RoomState, ServerToClientEvents } from '@cyrp/shared';
 import { createApp } from './app.js';
 import { createAudioStorage } from './audio/storage.js';
+import type { VoiceService } from './voice/livekit.js';
 
 type Client = Socket<ServerToClientEvents, ClientToServerEvents>;
 
 const tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cyrp-test-'));
 const storage = createAudioStorage(tmpRoot);
-const { server, close } = createApp({ storage });
+const voice = {
+  publicUrl: 'ws://voice.test',
+  createToken: vi.fn(async (code: string, who: { identity: string }, canPublish: boolean) =>
+    JSON.stringify({ code, identity: who.identity, canPublish }),
+  ),
+  setPublishAllowed: vi.fn(async () => {}),
+  removeParticipant: vi.fn(async () => {}),
+  closeRoom: vi.fn(async () => {}),
+} satisfies VoiceService;
+const { server, close } = createApp({ storage, voice, debug: true });
 let baseUrl: string;
 const clients: Client[] = [];
 
@@ -156,5 +166,77 @@ describe('rooms over sockets', () => {
 
     await alice.emitWithAck('room:leave', {});
     await waitFor(() => !fs.existsSync(dir));
+  });
+});
+
+describe('voice', () => {
+  async function roomWithTwo() {
+    const alice = await connect();
+    const created = await alice.emitWithAck('room:create', { nickname: 'Alice', color: '#ff0000' });
+    if (!created.ok) throw new Error(created.error);
+    const bob = await connect();
+    const joined = await bob.emitWithAck('room:join', {
+      code: created.code,
+      nickname: 'Bob',
+      color: '#00ff00',
+    });
+    if (!joined.ok) throw new Error(joined.error);
+    return { alice, bob, created, joined };
+  }
+
+  const tokenRequest = (code: string, sessionToken?: string) =>
+    fetch(`${baseUrl}/api/rooms/${code}/voice-token`, {
+      method: 'POST',
+      headers: sessionToken ? { 'X-Session-Token': sessionToken } : {},
+    });
+
+  it('mints a voice token only for players of the room', async () => {
+    const { created } = await roomWithTwo();
+    expect((await tokenRequest(created.code)).status).toBe(401);
+    expect((await tokenRequest(created.code, 'forged')).status).toBe(401);
+
+    const res = await tokenRequest(created.code.toLowerCase(), created.sessionToken);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { url: string; token: string };
+    expect(body.url).toBe('ws://voice.test');
+    expect(JSON.parse(body.token)).toEqual({
+      code: created.code,
+      identity: created.playerId,
+      canPublish: true,
+    });
+  });
+
+  it('mutes everyone: clients first, then LiveKit; and mints muted tokens meanwhile', async () => {
+    const { alice, bob, created, joined } = await roomWithTwo();
+    voice.setPublishAllowed.mockClear();
+
+    expect(await bob.emitWithAck('debug:setVoiceMuted', { muted: true })).toEqual({
+      ok: false,
+      error: 'NOT_HOST',
+    });
+
+    const bobMuted = new Promise((resolve) => bob.on('voice:mute', resolve));
+    const bobState = nextState(bob, (s) => s.voiceMuted);
+    expect(await alice.emitWithAck('debug:setVoiceMuted', { muted: true })).toEqual({ ok: true });
+    expect(await bobMuted).toEqual({ muted: true });
+    await bobState;
+    expect(voice.setPublishAllowed).toHaveBeenLastCalledWith(created.code, false);
+
+    const res = await tokenRequest(created.code, joined.sessionToken);
+    expect(JSON.parse(((await res.json()) as { token: string }).token).canPublish).toBe(false);
+
+    const bobUnmuted = new Promise((resolve) => bob.on('voice:mute', resolve));
+    await alice.emitWithAck('debug:setVoiceMuted', { muted: false });
+    expect(await bobUnmuted).toEqual({ muted: false });
+    expect(voice.setPublishAllowed).toHaveBeenLastCalledWith(created.code, true);
+  });
+
+  it('removes kicked players from voice and closes the voice room with the room', async () => {
+    const { alice, created, joined } = await roomWithTwo();
+    await alice.emitWithAck('room:kick', { playerId: joined.playerId });
+    expect(voice.removeParticipant).toHaveBeenCalledWith(created.code, joined.playerId);
+
+    await alice.emitWithAck('room:leave', {});
+    expect(voice.closeRoom).toHaveBeenCalledWith(created.code);
   });
 });

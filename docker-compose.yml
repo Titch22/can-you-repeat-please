@@ -2,9 +2,10 @@
 services:
   livekit:
     image: livekit/livekit-server:latest
-    # --node-ip: advertise localhost to browsers instead of the container's internal IP,
-    # which isn't reachable from the host on Docker Desktop (Windows/macOS).
-    command: --dev --bind 0.0.0.0 --node-ip 127.0.0.1
+    # --node-ip: the address advertised to browsers. The container's own IP isn't reachable from
+    # the host on Docker Desktop, and Firefox ignores 127.0.0.1, so use the dev machine's LAN IP.
+    # Override with LIVEKIT_NODE_IP if you develop on another machine.
+    command: --dev --bind 0.0.0.0 --node-ip ${LIVEKIT_NODE_IP:-192.168.1.239}
     ports:
       - '7880:7880' # HTTP / WebSocket signaling
       - '7881:7881' # WebRTC over TCP

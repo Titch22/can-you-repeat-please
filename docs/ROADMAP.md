@@ -22,11 +22,11 @@ Each milestone should end with something you can play or demo.
 
 ## M2: Voice lobby
 
-- [ ] `voice-token` endpoint (livekit-server-sdk)
-- [ ] Join LiveKit when entering a room; leave when leaving
-- [ ] Speaking indicators, self-mute, per-player volume sliders
-- [ ] Mic permission flow and a "headphones recommended" hint
-- [ ] `setPublishAllowed(room, bool)` helper, tested by hand from a debug button
+- [x] `voice-token` endpoint (livekit-server-sdk)
+- [x] Join LiveKit when entering a room; leave when leaving
+- [x] Speaking indicators, self-mute, per-player volume sliders
+- [x] Mic permission flow and a "headphones recommended" hint
+- [x] `setPublishAllowed(room, bool)` helper, with a dev-only "Test recording mute" button
 
 ## M3: Core game loop (default sound pack)
 

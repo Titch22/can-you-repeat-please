@@ -67,6 +67,7 @@ LOBBY ─start─► ROUND_INTRO ─► REFERENCE ─► RECORDING ─► PLAYBA
   - The server calls `RoomServiceClient.updateParticipant(room, identity, { permission: { canPublish: false, canSubscribe: true, … } })` for every participant. This is the enforcement: nobody can leak voice into someone else's recording.
   - The client also mutes its local track as soon as it gets the phase change, so the UI reacts instantly.
   - When the phase ends, the server sets `canPublish: true` again and the client republishes its mic track if the player hadn't muted themselves.
+- **Leaving:** when a player is kicked or removed, the server also removes them from the LiveKit room, since their voice token would otherwise stay valid. Closing a room deletes its LiveKit room.
 - **Ducking:** during REFERENCE and PLAYBACK, remote voice volume is lowered on the client (default 25%) so the game audio stays audible.
 - **Echo:** players on speakers could feed the reference sound back into voice. LiveKit's echo cancellation handles most of it, and ducking helps. Headphones are recommended in the lobby UI.
 
