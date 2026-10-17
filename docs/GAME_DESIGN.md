@@ -27,18 +27,24 @@
 
 ### Settings
 
-| Setting              | Values                                                     | Default   |
-| -------------------- | ---------------------------------------------------------- | --------- |
-| Rounds               | 1–20                                                       | 5         |
-| Sound source         | `default` (server pack), `custom` (lobby uploads), `mixed` | `default` |
-| Extra recording time | 0–3s added to the sound's length                           | 1s        |
-| Voting time          | 10–60s                                                     | 20s       |
+| Setting              | Values                                           | Default |
+| -------------------- | ------------------------------------------------ | ------- |
+| Rounds               | 1–20                                             | 5       |
+| Sounds               | Checkbox per sound: default pack + lobby uploads | none    |
+| Extra recording time | 0–3s added to the sound's length                 | 1s      |
+| Voting time          | 10–60s                                           | 20s     |
 
 ### Custom sounds
 
-- Any player can upload sounds in the lobby. Limits: **10 seconds or less**, **2 MB or less**, at most **5 per player**. Accepted formats: mp3, ogg, wav, webm, m4a.
-- Custom sounds belong to the lobby. They are **never stored long-term** and are **deleted when the lobby ends**, that is, when the last player leaves or the room times out.
-- The game needs at least one sound in the chosen source. A sound isn't picked again until every sound of the source has been used, so short packs still work for long games.
+- Any player can upload sounds in the lobby. Limits: **20 seconds or less** (measured by the server), **2 MB or less**, at most **5 per player**. Accepted formats: mp3, ogg, wav, webm, m4a. The uploader names the sound (default: the file name).
+- Custom sounds belong to the lobby. They are **never stored long-term**: they live in the room's temporary folder and are **deleted when the lobby ends** (the last player leaves or the room times out), when deleted by their uploader or the host, and at every server restart.
+- They stay available for the next games of the same lobby.
+
+### Choosing the sounds
+
+- The lobby lists every sound (the default pack, then uploads) in a grid with a preview button and a checkbox. Only the host can tick and untick; everyone sees the selection. Shortcuts: **All**, **None**, **Only uploads**.
+- Nothing is ticked by default, uploads included: the host picks the sounds before starting. The whole tile is clickable.
+- The game picks one ticked sound per round. A sound isn't picked again until every ticked sound has been used, so a short selection still works for long games. The game can't start until at least one sound is ticked.
 
 ## Round flow
 
@@ -48,7 +54,7 @@ Pause lengths are set in `apps/server/src/game/timing.ts`.
 | --- | ----------------- | ----------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | **Round intro**   | 3s                                              | on                 | "Round 2/5" title card                                                                                                                                         |
 | 2   | **Reference**     | sound length + 3s                               | on, volume lowered | The reference sound plays for everyone at the same time, then "Get ready to repeat it!"                                                                        |
-| 3   | **Recording**     | 3s + sound length + extra time (max 10s) + 2.5s | **muted**          | A 3-2-1 countdown, then everyone records at the same time. A level meter shows the mic is picking up sound. Then "Time's up!" while the last recordings arrive |
+| 3   | **Recording**     | 3s + sound length + extra time (max 23s) + 2.5s | **muted**          | A 3-2-1 countdown, then everyone records at the same time. A level meter shows the mic is picking up sound. Then "Time's up!" while the last recordings arrive |
 | 4   | **Playback**      | 3s + (clip length + 1.5s) × (players + 1)       | on, volume lowered | "Here come the attempts!", then the reference plays once more, then each recording plays in turn, in shuffled order, with the name of the player who made it   |
 | 5   | **Voting**        | voting time                                     | on                 | Each player upvotes **up to 2** recordings, not their own. Clips can be replayed or downloaded. The phase ends early once everyone has voted                   |
 | 6   | **Round results** | 6s                                              | on                 | Votes received this round and total scores                                                                                                                     |

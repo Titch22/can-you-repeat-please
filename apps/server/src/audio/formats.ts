@@ -1,3 +1,5 @@
+import { parseBuffer } from 'music-metadata';
+
 export interface AudioFormat {
   mime: string;
   ext: string;
@@ -20,4 +22,16 @@ export function sniffAudio(data: Buffer): AudioFormat | null {
     return { mime: 'audio/mpeg', ext: 'mp3' };
   }
   return null;
+}
+
+/** Duration in ms, read from the file's own metadata/frames; null if it can't be determined. */
+export async function measureDurationMs(data: Buffer, mime: string): Promise<number | null> {
+  try {
+    const { format } = await parseBuffer(data, { mimeType: mime }, { duration: true });
+    return format.duration && Number.isFinite(format.duration)
+      ? Math.round(format.duration * 1000)
+      : null;
+  } catch {
+    return null;
+  }
 }

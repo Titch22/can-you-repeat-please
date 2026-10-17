@@ -15,6 +15,7 @@
     "cors": "^2.8.6",
     "express": "^5.3.0",
     "livekit-server-sdk": "^2.19.1",
+    "music-metadata": "^12.2.2",
     "socket.io": "^4.8.4",
     "zod": "^4.6.7"
   },

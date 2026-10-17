@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // Needs a LiveKit server (`docker compose up -d`); skipped otherwise.
 const livekitUp = await fetch('http://localhost:7880')
@@ -18,10 +19,10 @@ async function enterLobby(page: Page, nickname: string, code?: string) {
 const micOff = (viewer: Page, nickname: string) =>
   viewer.getByTestId(`player-${nickname}`).getByTitle('Mic off');
 
-test('voice lobby: speaking indicator, self-mute, and the game mute', async ({ browser }) => {
+test('voice lobby: speaking indicator, self-mute, and the game mute', async ({ newPlayer }) => {
   // The fake mic plays a periodic beep, which LiveKit detects as speech.
-  const alice = await (await browser.newContext()).newPage();
-  const bob = await (await browser.newContext()).newPage();
+  const alice = await newPlayer();
+  const bob = await newPlayer();
 
   const code = await enterLobby(alice, 'Alice');
   await enterLobby(bob, 'Bob', code);
@@ -39,21 +40,21 @@ test('voice lobby: speaking indicator, self-mute, and the game mute', async ({ b
 
   // The game mute silences everyone, then everyone comes back.
   await alice.getByRole('button', { name: 'Test recording mute' }).click();
-  await expect(bob.getByText('Everyone is muted by the game')).toBeVisible();
+  await expect(bob.getByTestId('room-status')).toHaveText(/Everyone is muted/);
   await expect(micOff(bob, 'Alice')).toBeVisible();
   await expect(micOff(alice, 'Bob')).toBeVisible();
   // Bob's own mute button can't bring his mic back while the game mute is on.
   await expect(micOff(bob, 'Bob')).toBeVisible();
 
   await alice.getByRole('button', { name: 'End test mute' }).click();
-  await expect(bob.getByText('Everyone is muted by the game')).toHaveCount(0);
+  await expect(bob.getByTestId('room-status')).toHaveText(/Room open · 2 players · voice chat on/);
   await expect(micOff(bob, 'Alice')).toHaveCount(0, { timeout: 10_000 });
   await expect(micOff(alice, 'Bob')).toHaveCount(0, { timeout: 10_000 });
 });
 
-test('a kicked player is removed from voice', async ({ browser }) => {
-  const alice = await (await browser.newContext()).newPage();
-  const bob = await (await browser.newContext()).newPage();
+test('a kicked player is removed from voice', async ({ newPlayer }) => {
+  const alice = await newPlayer();
+  const bob = await newPlayer();
   const code = await enterLobby(alice, 'Alice');
   await enterLobby(bob, 'Bob', code);
 

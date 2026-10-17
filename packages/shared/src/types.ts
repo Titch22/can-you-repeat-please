@@ -19,6 +19,7 @@ export interface SoundRef {
   label: string;
   durationMs: number;
   url: string;
+  /** Set for sounds uploaded in the lobby: the uploader's player id. */
   uploadedBy?: string;
 }
 
@@ -45,7 +46,8 @@ export interface RoomState {
   code: string;
   players: Player[];
   settings: Settings;
-  customSounds: SoundRef[];
+  /** Every sound of the room: the default pack, then uploads (which have `uploadedBy`). */
+  sounds: SoundRef[];
   phase: Phase;
   /** True while voice chat is muted by the game (recording phase). */
   voiceMuted: boolean;
@@ -83,6 +85,7 @@ export type ErrorCode =
   | 'FILE_TOO_LARGE'
   | 'UNSUPPORTED_FORMAT'
   | 'TOO_MANY_SOUNDS'
+  | 'SOUND_TOO_LONG'
   | 'ALREADY_SUBMITTED'
   | 'CANNOT_VOTE_SELF'
   | 'TOO_MANY_VOTES'

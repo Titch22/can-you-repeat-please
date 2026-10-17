@@ -27,7 +27,7 @@ interface Player {
 
 interface Settings {
   rounds: number; // 1–20
-  soundSource: 'default' | 'custom' | 'mixed';
+  selectedSoundIds: string[]; // sounds ticked for the game; none by default
   extraRecordMs: number; // 0–3000
   votingMs: number; // 10000–60000
 }
@@ -52,7 +52,7 @@ interface RoomState {
   code: string;
   players: Player[];
   settings: Settings;
-  customSounds: SoundRef[];
+  sounds: SoundRef[]; // default pack, then uploads (which have uploadedBy)
   phase: Phase;
   voiceMuted: boolean; // voice chat muted by the game (recording)
   deadline: number | null; // end of the current phase, server epoch ms
@@ -104,17 +104,17 @@ Every event takes an ack callback that receives `{ ok: true, ... } | { ok: false
 
 Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessionToken>`. Routes used as `<audio src>` also accept `?t=<sessionToken>`.
 
-| Method | Route                                      | Body                       | Response         | Notes                                                                                                                                      |
-| ------ | ------------------------------------------ | -------------------------- | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `GET`  | `/api/health`                              |                            | `{ ok: true }`   |                                                                                                                                            |
-| `POST` | `/api/rooms/:code/voice-token`             |                            | `{ url, token }` | LiveKit URL (`LIVEKIT_PUBLIC_URL`) and a 15-min JWT for room `cyrp-<code>`; no publish right while `voiceMuted`                            |
-| `POST` | `/api/rooms/:code/sounds`                  | multipart `file`, `label`  | `SoundRef`       | Lobby only; ≤2 MB, ≤10s, ≤5 per player                                                                                                     |
-| `POST` | `/api/rooms/:code/rounds/:round/recording` | raw audio bytes (the blob) | `{ ok: true }`   | During RECORDING (until 3s after the window); ≤2 MB; one per player per round. Format sniffed from the bytes: webm, ogg, wav, mp4/m4a, mp3 |
-| `GET`  | `/api/rooms/:code/audio/:fileId`           |                            | audio bytes      | Recordings and custom sounds. `?download=<name>` sends it as an attachment named `<name>.<ext>`                                            |
-| `GET`  | `/sounds/default/:file`                    |                            | audio bytes      | Static default pack, public                                                                                                                |
+| Method | Route                                      | Body                       | Response         | Notes                                                                                                                                                             |
+| ------ | ------------------------------------------ | -------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/api/health`                              |                            | `{ ok: true }`   |                                                                                                                                                                   |
+| `POST` | `/api/rooms/:code/voice-token`             |                            | `{ url, token }` | LiveKit URL (`LIVEKIT_PUBLIC_URL`) and a 15-min JWT for room `cyrp-<code>`; no publish right while `voiceMuted`                                                   |
+| `POST` | `/api/rooms/:code/sounds?label=<name>`     | raw audio bytes            | `SoundRef`       | Lobby only; ≤2 MB, 0.2–20s (measured by the server), ≤5 per player. Errors: 409 `TOO_MANY_SOUNDS` / `WRONG_PHASE`, 415 `UNSUPPORTED_FORMAT`, 422 `SOUND_TOO_LONG` |
+| `POST` | `/api/rooms/:code/rounds/:round/recording` | raw audio bytes (the blob) | `{ ok: true }`   | During RECORDING (until 3s after the window); ≤2 MB; one per player per round. Format sniffed from the bytes: webm, ogg, wav, mp4/m4a, mp3                        |
+| `GET`  | `/api/rooms/:code/audio/:fileId`           |                            | audio bytes      | Recordings and custom sounds. `?download=<name>` sends it as an attachment named `<name>.<ext>`                                                                   |
+| `GET`  | `/sounds/default/:file`                    |                            | audio bytes      | Static default pack, public                                                                                                                                       |
 
 ### Error codes
 
-`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `SPECTATOR`.
+`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `SOUND_TOO_LONG`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `SPECTATOR`.
 
 HTTP errors use the same codes in `{ ok: false, error }`, with status 401 (no seat), 409 (wrong phase, already submitted), 403 (spectator), 413 (too large) or 415 (format).

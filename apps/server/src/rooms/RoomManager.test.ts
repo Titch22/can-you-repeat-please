@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MAX_PLAYERS, RECONNECT_GRACE_MS, ROOM_IDLE_TIMEOUT_MS } from '@cyrp/shared';
+import {
+  MAX_CUSTOM_SOUNDS_PER_PLAYER,
+  MAX_PLAYERS,
+  RECONNECT_GRACE_MS,
+  ROOM_IDLE_TIMEOUT_MS,
+} from '@cyrp/shared';
 import { RoomError, RoomManager, type RoomManagerHooks } from './RoomManager.js';
 
 function setup() {
@@ -113,7 +118,7 @@ describe('RoomManager', () => {
     );
     rooms.updateSettings(room.code, host.id, { rounds: 3 });
     expect(room.settings.rounds).toBe(3);
-    expect(room.settings.soundSource).toBe('default');
+    expect(room.settings.selectedSoundIds).toEqual([]); // no sound ticked by default
   });
 
   it('closes idle rooms on sweep', () => {
@@ -125,5 +130,54 @@ describe('RoomManager', () => {
     rooms.sweepIdle();
     expect(rooms.get(room.code)).toBeUndefined();
     expect(hooks.onClosed).toHaveBeenCalledWith(room, 'idle');
+  });
+});
+
+describe('RoomManager custom sounds', () => {
+  const upload = (id: string, by: string) => ({
+    id,
+    label: id,
+    durationMs: 1000,
+    url: `/api/x/${id}`,
+    uploadedBy: by,
+  });
+
+  it('lists the default pack, then uploads, and caps uploads per player', () => {
+    const def = { id: 'default:a', label: 'A', durationMs: 1000, url: '/sounds/default/a.mp3' };
+    const rooms = new RoomManager({}, Date.now, [def]);
+    const { room, player: host } = rooms.create('Alice', '#ff0000', 's');
+    for (let i = 0; i < MAX_CUSTOM_SOUNDS_PER_PLAYER; i++)
+      rooms.addCustomSound(room, upload(`u${i}`, host.id));
+    expect(errorCode(() => rooms.assertCanAddSound(room, host.id))).toBe('TOO_MANY_SOUNDS');
+    expect(rooms.toState(room, host.id).sounds.map((s) => s.id)).toEqual([
+      'default:a',
+      ...Array.from({ length: MAX_CUSTOM_SOUNDS_PER_PLAYER }, (_, i) => `u${i}`),
+    ]);
+  });
+
+  it('only accepts uploads in the lobby', () => {
+    const rooms = new RoomManager();
+    const { room, player } = rooms.create('Alice', '#ff0000', 's');
+    room.phase = 'RECORDING';
+    expect(errorCode(() => rooms.assertCanAddSound(room, player.id))).toBe('WRONG_PHASE');
+  });
+
+  it('lets the uploader or the host delete a sound, and forgets it in the selection', () => {
+    const rooms = new RoomManager();
+    const { room, player: host } = rooms.create('Alice', '#ff0000', 's1');
+    const { player: bob } = rooms.join(room.code, 'Bob', '#00ff00', 's2');
+    const { player: carol } = rooms.join(room.code, 'Carol', '#0000ff', 's3');
+    rooms.addCustomSound(room, upload('bob-1', bob.id));
+    rooms.addCustomSound(room, upload('bob-2', bob.id));
+    rooms.updateSettings(room.code, host.id, { selectedSoundIds: ['bob-1', 'default:x'] });
+
+    expect(errorCode(() => rooms.removeCustomSound(room.code, carol.id, 'bob-1'))).toBe('NOT_HOST');
+    rooms.removeCustomSound(room.code, bob.id, 'bob-1');
+    rooms.removeCustomSound(room.code, host.id, 'bob-2');
+    expect(room.customSounds).toEqual([]);
+    expect(room.settings.selectedSoundIds).toEqual(['default:x']);
+    expect(errorCode(() => rooms.removeCustomSound(room.code, host.id, 'nope'))).toBe(
+      'INVALID_PAYLOAD',
+    );
   });
 });

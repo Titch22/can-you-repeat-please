@@ -2,6 +2,9 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './e2e',
+  // Each test runs several browsers doing WebRTC, recording and audio on this one machine; more
+  // parallel workers starve them (voice detection, short game phases) and make tests flaky.
+  workers: 2,
   use: {
     baseURL: 'http://localhost:5173',
   },

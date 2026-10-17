@@ -101,7 +101,8 @@ tmp/rooms/<code>/          ephemeral, one dir per room
 ```
 
 - Audio is served with `GET /api/rooms/:code/audio/:fileId`. The request needs the player's `sessionToken` (an HTTP header or query param), so only room members can download.
-- Recordings are deleted when the game returns to the lobby. Custom sounds are kept for the next game in the same lobby.
+- Recordings are deleted when the game returns to the lobby. Custom sounds are kept for the next game in the same lobby, until their uploader or the host deletes them.
+- Custom sound durations are measured by the server (`music-metadata`), not trusted from the client: they drive the recording window.
 - **The room dir is deleted when the room closes**: when the last player leaves (after the 30s reconnect grace period), or after 30 minutes idle.
 - At startup, the server wipes `tmp/rooms/`, so nothing survives a crash.
 

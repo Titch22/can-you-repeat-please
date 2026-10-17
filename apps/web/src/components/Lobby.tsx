@@ -5,18 +5,21 @@ import { leaveRoom, startGame } from '../lib/actions';
 import { errorMessage } from '../lib/errors';
 import { useGame } from '../store';
 import { PlayerList } from './PlayerList';
+import { RoomStatus } from './RoomStatus';
 import { SettingsPanel } from './SettingsPanel';
+import { SoundsPanel } from './SoundsPanel';
 import { VoiceBar } from './VoiceBar';
 import { Button, ErrorText, Page } from './ui';
 
 export function Lobby({ room }: { room: RoomState }) {
   const navigate = useNavigate();
   const meId = useGame((s) => s.playerId);
-  const connected = useGame((s) => s.connected);
   const amHost = room.players.some((p) => p.id === meId && p.isHost);
   const [copied, setCopied] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const enoughPlayers = room.players.filter((p) => p.connected).length >= MIN_PLAYERS;
+  const selected = new Set(room.settings.selectedSoundIds);
+  const enoughSounds = room.sounds.some((s) => selected.has(s.id));
 
   const start = async () => {
     setStartError(null);
@@ -41,6 +44,7 @@ export function Lobby({ room }: { room: RoomState }) {
 
   return (
     <Page>
+      <RoomStatus room={room} />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-400">Room code</p>
@@ -58,12 +62,6 @@ export function Lobby({ room }: { room: RoomState }) {
         </div>
       </header>
 
-      {!connected && (
-        <p className="rounded-xl bg-amber-400/10 px-4 py-2 text-sm text-amber-200">
-          Connection lost, reconnecting…
-        </p>
-      )}
-
       <VoiceBar gameMuted={room.voiceMuted} amHost={amHost} />
 
       <div className="grid gap-4 sm:grid-cols-2">
@@ -71,20 +69,24 @@ export function Lobby({ room }: { room: RoomState }) {
         <SettingsPanel settings={room.settings} editable={amHost} />
       </div>
 
+      <SoundsPanel room={room} meId={meId} amHost={amHost} />
+
       <footer className="flex flex-col items-center gap-2">
         {amHost ? (
           <>
             <Button
               className="w-full max-w-xs py-3 text-lg"
-              disabled={!enoughPlayers}
+              disabled={!enoughPlayers || !enoughSounds}
               onClick={() => void start()}
             >
               Start game
             </Button>
             <p className="text-sm text-slate-400">
-              {enoughPlayers
-                ? `${room.settings.rounds} rounds. Have fun!`
-                : `Waiting for at least ${MIN_PLAYERS} players…`}
+              {!enoughPlayers
+                ? `Waiting for at least ${MIN_PLAYERS} players…`
+                : !enoughSounds
+                  ? 'Tick at least one sound below.'
+                  : `${room.settings.rounds} rounds. Have fun!`}
             </p>
             <ErrorText>{startError}</ErrorText>
           </>

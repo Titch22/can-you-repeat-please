@@ -3,6 +3,7 @@ import type { Phase, RoomState } from '@cyrp/shared';
 import { preload, unlockAudio, useAudioUnlock } from '../../lib/audio';
 import { setDucked, useVoice } from '../../lib/voice';
 import { useGame } from '../../store';
+import { RoomStatus } from '../RoomStatus';
 import { VoiceBar } from '../VoiceBar';
 import { Button, Card, Page } from '../ui';
 import { Avatar, SecondsLeft } from './bits';
@@ -65,6 +66,7 @@ export function GameView({ room }: { room: RoomState }) {
 
   return (
     <Page>
+      <RoomStatus room={room} />
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-sm text-slate-400">

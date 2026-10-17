@@ -3,12 +3,6 @@ import type { Settings } from '@cyrp/shared';
 import { updateSettings } from '../lib/actions';
 import { Card } from './ui';
 
-const SOURCES: { value: Settings['soundSource']; label: string }[] = [
-  { value: 'default', label: 'Default pack' },
-  { value: 'custom', label: 'Our uploads' },
-  { value: 'mixed', label: 'Mixed' },
-];
-
 function Row({ label, value, children }: { label: string; value: string; children: ReactNode }) {
   return (
     <label className="flex flex-col gap-1.5">
@@ -46,29 +40,6 @@ export function SettingsPanel({ settings, editable }: { settings: Settings; edit
             aria-label="Rounds"
           />
         </Row>
-
-        <div className="flex flex-col gap-1.5">
-          <span className="text-sm text-slate-400">Sounds</span>
-          <div className="grid grid-cols-3 gap-1 rounded-xl bg-slate-950 p-1" role="radiogroup">
-            {SOURCES.map((s) => (
-              <button
-                key={s.value}
-                type="button"
-                role="radio"
-                aria-checked={settings.soundSource === s.value}
-                disabled={!editable}
-                onClick={() => set({ soundSource: s.value })}
-                className={`rounded-lg px-2 py-1.5 text-sm transition disabled:cursor-default ${
-                  settings.soundSource === s.value
-                    ? 'bg-slate-700 font-semibold'
-                    : 'text-slate-400 enabled:hover:text-slate-100'
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
-          </div>
-        </div>
 
         <Row label="Extra recording time" value={`+${settings.extraRecordMs / 1000}s`}>
           <input

@@ -5,9 +5,11 @@ export const ROOM_CODE_LENGTH = 4;
 export const RECONNECT_GRACE_MS = 30_000;
 export const ROOM_IDLE_TIMEOUT_MS = 30 * 60_000;
 
-export const MAX_RECORDING_MS = 10_000;
+/** Longest recording window: the longest custom sound plus the max extra recording time. */
+export const MAX_RECORDING_MS = 23_000;
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
-export const MAX_CUSTOM_SOUND_MS = 10_000;
+export const MAX_CUSTOM_SOUND_MS = 20_000;
+export const MIN_CUSTOM_SOUND_MS = 200;
 export const MAX_CUSTOM_SOUNDS_PER_PLAYER = 5;
 /** How long after the recording window uploads are still accepted. */
 export const RECORDING_UPLOAD_GRACE_MS = 3_000;

@@ -1,4 +1,4 @@
-import type { Ack, Settings } from '@cyrp/shared';
+import type { Ack, ErrorCode, Settings, SoundRef } from '@cyrp/shared';
 import { useGame } from '../store';
 import { socket } from './socket';
 import { loadSession, saveSession, type Profile } from './storage';
@@ -79,3 +79,26 @@ export const castVote = (clipIds: string[]) =>
 
 export const backToLobby = () =>
   call(socket.timeout(TIMEOUT_MS).emitWithAck('game:backToLobby', {}));
+
+/** Uploads a custom sound for the room (raw body; the server checks format and length). */
+export async function uploadSound(
+  code: string,
+  file: Blob,
+  label: string,
+): Promise<{ ok: true; sound: SoundRef } | { ok: false; error: ErrorCode }> {
+  try {
+    const res = await fetch(`/api/rooms/${code}/sounds?label=${encodeURIComponent(label)}`, {
+      method: 'POST',
+      headers: { 'X-Session-Token': loadSession()?.sessionToken ?? '' },
+      body: file,
+    });
+    const body = (await res.json().catch(() => ({}))) as { error?: ErrorCode } & SoundRef;
+    if (res.ok) return { ok: true, sound: body };
+    return { ok: false, error: body.error ?? (res.status === 413 ? 'FILE_TOO_LARGE' : 'INTERNAL') };
+  } catch {
+    return { ok: false, error: 'INTERNAL' };
+  }
+}
+
+export const deleteSound = (soundId: string) =>
+  call(socket.timeout(TIMEOUT_MS).emitWithAck('room:deleteSound', { soundId }));

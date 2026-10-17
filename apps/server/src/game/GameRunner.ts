@@ -323,14 +323,9 @@ export class GameRunner {
     if (player.isSpectator) throw new RoomError('SPECTATOR');
   }
 
+  /** The sounds of the room (default pack + uploads) the host ticked. */
   private soundPool(room: Room): SoundRef[] {
-    switch (room.settings.soundSource) {
-      case 'custom':
-        return room.customSounds;
-      case 'mixed':
-        return [...this.deps.defaultSounds, ...room.customSounds];
-      default:
-        return this.deps.defaultSounds;
-    }
+    const selected = new Set(room.settings.selectedSoundIds);
+    return [...this.deps.defaultSounds, ...room.customSounds].filter((s) => selected.has(s.id));
   }
 }

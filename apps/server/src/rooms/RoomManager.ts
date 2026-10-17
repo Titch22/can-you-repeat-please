@@ -1,6 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import {
   DEFAULT_SETTINGS,
+  MAX_CUSTOM_SOUNDS_PER_PLAYER,
   MAX_PLAYERS,
   RECONNECT_GRACE_MS,
   ROOM_CODE_LENGTH,
@@ -75,6 +76,8 @@ export class RoomManager {
   constructor(
     private hooks: RoomManagerHooks = {},
     private now: () => number = Date.now,
+    /** The server's default pack, listed to clients before each room's uploads. */
+    private defaultSounds: SoundRef[] = [],
   ) {}
 
   get size() {
@@ -179,6 +182,35 @@ export class RoomManager {
     return room;
   }
 
+  /** Throws unless `playerId` may upload one more sound now (lobby only, per-player cap). */
+  assertCanAddSound(room: Room, playerId: string) {
+    if (room.phase !== 'LOBBY') throw new RoomError('WRONG_PHASE');
+    const mine = room.customSounds.filter((s) => s.uploadedBy === playerId).length;
+    if (mine >= MAX_CUSTOM_SOUNDS_PER_PLAYER) throw new RoomError('TOO_MANY_SOUNDS');
+  }
+
+  addCustomSound(room: Room, sound: SoundRef & { uploadedBy: string }) {
+    this.assertCanAddSound(room, sound.uploadedBy);
+    room.customSounds.push(sound);
+    this.touch(room);
+  }
+
+  /** Removes an uploaded sound (its uploader or the host, in the lobby). Returns it. */
+  removeCustomSound(code: string, playerId: string, soundId: string) {
+    const room = this.getOrThrow(code);
+    const sound = room.customSounds.find((s) => s.id === soundId);
+    if (!sound) throw new RoomError('INVALID_PAYLOAD');
+    if (sound.uploadedBy !== playerId && room.hostId !== playerId) throw new RoomError('NOT_HOST');
+    if (room.phase !== 'LOBBY') throw new RoomError('WRONG_PHASE');
+    room.customSounds = room.customSounds.filter((s) => s !== sound);
+    room.settings = {
+      ...room.settings,
+      selectedSoundIds: room.settings.selectedSoundIds.filter((id) => id !== soundId),
+    };
+    this.touch(room);
+    return sound;
+  }
+
   requireHost(code: string, playerId: string) {
     this.assertHost(this.getOrThrow(code), playerId);
   }
@@ -220,7 +252,7 @@ export class RoomManager {
         score: p.score,
       })),
       settings: room.settings,
-      customSounds: room.customSounds,
+      sounds: [...this.defaultSounds, ...room.customSounds],
       phase: room.phase,
       voiceMuted: room.voiceMuted,
       ...this.gameView(room, viewerId),

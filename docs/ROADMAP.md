@@ -42,10 +42,10 @@ Each milestone should end with something you can play or demo.
 
 ## M4: Custom sounds
 
-- [ ] Lobby upload UI (drag and drop, label, preview, delete)
-- [ ] Server validation (size, duration, format, per-player cap)
-- [ ] `soundSource` setting: default, custom or mixed; start blocked if there aren't enough sounds
-- [ ] Test that files are deleted when the lobby ends
+- [x] Lobby upload UI (file picker, name, preview, delete)
+- [x] Server validation (size, format, duration measured server-side, per-player cap)
+- [x] Sound picker grid with checkboxes (host, nothing ticked by default), replacing the default/custom/mixed setting; start blocked with no sound ticked
+- [x] Tests: files deleted on delete and when the lobby ends; e2e upload → pick → play
 
 ## M5: Polish and deploy
 

@@ -90,8 +90,12 @@ function PlayerRow({
           </Button>
         )}
       </div>
-      {!isMe && voice && (
-        <label className="flex items-center gap-2 pl-12 text-xs text-slate-400">
+      {/* Always rendered for others (disabled until their voice connects), so rows don't grow
+          when someone joins voice and shift the page under the user's cursor. */}
+      {!isMe && (
+        <label
+          className={`flex items-center gap-2 pl-12 text-xs text-slate-400 ${voice ? '' : 'opacity-40'}`}
+        >
           <span className="sr-only">Volume of {p.nickname}</span>
           <span aria-hidden>Vol</span>
           <input
@@ -101,6 +105,7 @@ function PlayerRow({
             step={0.05}
             value={volume}
             onChange={(e) => setPeerVolume(p.id, Number(e.target.value))}
+            disabled={!voice}
             className="h-1 flex-1 accent-slate-400"
           />
         </label>

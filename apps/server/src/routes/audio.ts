@@ -1,16 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import express, { Router, type ErrorRequestHandler } from 'express';
-import { MAX_UPLOAD_BYTES } from '@cyrp/shared';
-import { sniffAudio } from '../audio/formats.js';
+import {
+  MAX_CUSTOM_SOUND_MS,
+  MAX_UPLOAD_BYTES,
+  MIN_CUSTOM_SOUND_MS,
+  SoundLabelSchema,
+} from '@cyrp/shared';
+import { measureDurationMs, sniffAudio } from '../audio/formats.js';
 import type { AudioStorage } from '../audio/storage.js';
 import type { GameRunner } from '../game/GameRunner.js';
+import { clipUrl } from '../game/state.js';
 import { RoomError, type RoomManager } from '../rooms/RoomManager.js';
 import { requireSession, type SessionLocals } from './auth.js';
 
 const STATUS: Partial<Record<string, number>> = {
   WRONG_PHASE: 409,
   ALREADY_SUBMITTED: 409,
+  TOO_MANY_SOUNDS: 409,
+  SOUND_TOO_LONG: 422,
   SPECTATOR: 403,
   UNSUPPORTED_FORMAT: 415,
   FILE_TOO_LARGE: 413,
@@ -49,6 +57,45 @@ export function audioRoutes(rooms: RoomManager, game: GameRunner, storage: Audio
         throw new RoomError('WRONG_PHASE');
       }
       res.json({ ok: true });
+    },
+  );
+
+  // Custom sound for the room (lobby only). Raw body; ?label=<name shown in the lobby>.
+  // Kept as a temp file until it is deleted or the room closes.
+  router.post(
+    '/api/rooms/:code/sounds',
+    requireSession(rooms),
+    express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
+    async (req, res) => {
+      const { room, player } = res.locals as SessionLocals;
+      rooms.assertCanAddSound(room, player.id);
+      const label = SoundLabelSchema.safeParse(req.query.label);
+      if (!label.success) throw new RoomError('INVALID_PAYLOAD');
+      const format = Buffer.isBuffer(req.body) ? sniffAudio(req.body) : null;
+      if (!format) throw new RoomError('UNSUPPORTED_FORMAT');
+      const durationMs = await measureDurationMs(req.body, format.mime);
+      if (durationMs === null) throw new RoomError('UNSUPPORTED_FORMAT');
+      if (durationMs > MAX_CUSTOM_SOUND_MS) throw new RoomError('SOUND_TOO_LONG');
+      if (durationMs < MIN_CUSTOM_SOUND_MS) throw new RoomError('INVALID_PAYLOAD');
+
+      const fileId = randomUUID();
+      const file = await storage.saveFile(room.code, `snd-${fileId}.${format.ext}`, req.body);
+      const sound = {
+        id: fileId,
+        label: label.data,
+        durationMs,
+        url: clipUrl(room.code, fileId),
+        uploadedBy: player.id,
+      };
+      try {
+        room.files.set(fileId, { path: file, mime: format.mime, kind: 'sound' });
+        rooms.addCustomSound(room, sound); // re-checks phase and cap (concurrent uploads)
+      } catch (err) {
+        room.files.delete(fileId);
+        await storage.deleteFile(file);
+        throw err;
+      }
+      res.json(sound);
     },
   );
 

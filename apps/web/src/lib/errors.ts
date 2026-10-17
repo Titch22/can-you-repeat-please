@@ -1,4 +1,4 @@
-import type { ErrorCode } from '@cyrp/shared';
+import { MAX_CUSTOM_SOUND_MS, type ErrorCode } from '@cyrp/shared';
 
 const MESSAGES: Record<ErrorCode, string> = {
   ROOM_NOT_FOUND: 'This room does not exist (anymore).',
@@ -9,9 +9,10 @@ const MESSAGES: Record<ErrorCode, string> = {
   WRONG_PHASE: 'You can’t do that right now.',
   INVALID_PAYLOAD: 'Invalid input.',
   NICKNAME_TAKEN: 'Someone in this room already uses that nickname.',
-  FILE_TOO_LARGE: 'That file is too large.',
-  UNSUPPORTED_FORMAT: 'That file format is not supported.',
-  TOO_MANY_SOUNDS: 'You have uploaded too many sounds.',
+  FILE_TOO_LARGE: 'That file is too large (2 MB max).',
+  UNSUPPORTED_FORMAT: 'That file isn’t a supported sound (mp3, ogg, wav, webm, m4a).',
+  TOO_MANY_SOUNDS: 'You’ve reached the upload limit (5 sounds).',
+  SOUND_TOO_LONG: `That sound is too long (${MAX_CUSTOM_SOUND_MS / 1000} seconds max).`,
   ALREADY_SUBMITTED: 'Already submitted.',
   CANNOT_VOTE_SELF: 'You can’t vote for yourself.',
   TOO_MANY_VOTES: 'You can only vote for 2 recordings.',

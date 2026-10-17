@@ -58,30 +58,36 @@ export function createApp({
     }
   };
 
-  const rooms = new RoomManager({
-    onCreated: (room) => {
-      storage.ensureRoom(room.code).catch((err) => console.error('[storage] mkdir failed', err));
+  const rooms = new RoomManager(
+    {
+      onCreated: (room) => {
+        storage.ensureRoom(room.code).catch((err) => console.error('[storage] mkdir failed', err));
+      },
+      onChanged: broadcast,
+      onPlayerRemoved: (room, player, reason) => {
+        if (reason === 'kicked' && player.socketId) {
+          io.to(player.socketId).emit('room:kicked', { reason: 'You were kicked by the host.' });
+        }
+        detach(player.socketId);
+        // Their voice token stays valid until it expires: cut them off from voice explicitly.
+        void voice.removeParticipant(room.code, player.id);
+      },
+      onPresenceChanged: (room) => game.onPresenceChanged(room),
+      onClosed: (room) => {
+        game.stop(room.code);
+        for (const p of room.players) {
+          if (p.socketId) io.to(p.socketId).emit('room:closed');
+          detach(p.socketId);
+        }
+        void voice.closeRoom(room.code);
+        storage
+          .deleteRoom(room.code)
+          .catch((err) => console.error('[storage] cleanup failed', err));
+      },
     },
-    onChanged: broadcast,
-    onPlayerRemoved: (room, player, reason) => {
-      if (reason === 'kicked' && player.socketId) {
-        io.to(player.socketId).emit('room:kicked', { reason: 'You were kicked by the host.' });
-      }
-      detach(player.socketId);
-      // Their voice token stays valid until it expires: cut them off from voice explicitly.
-      void voice.removeParticipant(room.code, player.id);
-    },
-    onPresenceChanged: (room) => game.onPresenceChanged(room),
-    onClosed: (room) => {
-      game.stop(room.code);
-      for (const p of room.players) {
-        if (p.socketId) io.to(p.socketId).emit('room:closed');
-        detach(p.socketId);
-      }
-      void voice.closeRoom(room.code);
-      storage.deleteRoom(room.code).catch((err) => console.error('[storage] cleanup failed', err));
-    },
-  });
+    Date.now,
+    defaultSounds,
+  );
 
   /**
    * Game-wide voice mute (recording phase). Muting tells clients first so they go quiet
@@ -119,7 +125,16 @@ export function createApp({
 
   app.use(voiceRoutes(rooms, voice));
   app.use(audioRoutes(rooms, game, storage));
-  registerRoomHandlers(io, rooms, { game, setVoiceMuted, debug });
+  const deleteSound = (code: string, playerId: string, soundId: string) => {
+    const sound = rooms.removeCustomSound(code, playerId, soundId);
+    const room = rooms.getOrThrow(code);
+    const file = room.files.get(sound.id);
+    room.files.delete(sound.id);
+    if (file)
+      storage.deleteFile(file.path).catch((err) => console.error('[storage] delete failed', err));
+  };
+
+  registerRoomHandlers(io, rooms, { game, setVoiceMuted, deleteSound, debug });
   serveWebApp(app);
 
   const sweep = setInterval(() => rooms.sweepIdle(), 60_000);

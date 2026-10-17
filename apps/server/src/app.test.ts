@@ -280,6 +280,7 @@ describe('recordings over HTTP', () => {
     expect((await upload(created.code, 1, created.sessionToken, wav())).status).toBe(409);
 
     const recording = nextState(alice, (s) => s.phase === 'RECORDING');
+    await alice.emitWithAck('room:updateSettings', { selectedSoundIds: ['default:beep'] });
     expect(await alice.emitWithAck('game:start', {})).toEqual({ ok: true });
     const state = await recording;
 
@@ -325,4 +326,96 @@ describe('recordings over HTTP', () => {
     expect(dl.status).toBe(200);
     expect(dl.headers.get('content-disposition')).toBe('attachment; filename="Bob - Goat..x.wav"');
   }, 15_000);
+});
+
+describe('custom sounds over HTTP', () => {
+  /** A valid mono 16-bit PCM WAV of `seconds` of silence at 8 kHz. */
+  const pcmWav = (seconds: number) => {
+    const rate = 8000;
+    const data = Math.round(seconds * rate) * 2;
+    const b = Buffer.alloc(44 + data);
+    b.write('RIFF', 0, 'latin1');
+    b.writeUInt32LE(36 + data, 4);
+    b.write('WAVEfmt ', 8, 'latin1');
+    b.writeUInt32LE(16, 16);
+    b.writeUInt16LE(1, 20);
+    b.writeUInt16LE(1, 22);
+    b.writeUInt32LE(rate, 24);
+    b.writeUInt32LE(rate * 2, 28);
+    b.writeUInt16LE(2, 32);
+    b.writeUInt16LE(16, 34);
+    b.write('data', 36, 'latin1');
+    b.writeUInt32LE(data, 40);
+    return b;
+  };
+  const uploadSound = (code: string, token: string, body: Buffer, label = 'My sound') =>
+    fetch(`${baseUrl}/api/rooms/${code}/sounds?label=${encodeURIComponent(label)}`, {
+      method: 'POST',
+      headers: { 'X-Session-Token': token },
+      body: new Uint8Array(body),
+    });
+
+  it('uploads, lists, plays, caps and deletes room sounds', async () => {
+    const alice = await connect();
+    const created = await alice.emitWithAck('room:create', { nickname: 'Alice', color: '#ff0000' });
+    if (!created.ok) throw new Error(created.error);
+    const bob = await connect();
+    const joined = await bob.emitWithAck('room:join', {
+      code: created.code,
+      nickname: 'Bob',
+      color: '#00ff00',
+    });
+    if (!joined.ok) throw new Error(joined.error);
+    const { code } = created;
+
+    const error = async (res: Response) => [
+      res.status,
+      ((await res.json()) as { error: string }).error,
+    ];
+    expect((await uploadSound(code, 'forged', pcmWav(1))).status).toBe(401);
+    expect(await error(await uploadSound(code, joined.sessionToken, pcmWav(1), ' '))).toEqual([
+      400,
+      'INVALID_PAYLOAD',
+    ]);
+    expect(
+      await error(await uploadSound(code, joined.sessionToken, Buffer.from('<html>hi</html>'))),
+    ).toEqual([415, 'UNSUPPORTED_FORMAT']);
+    expect(await error(await uploadSound(code, joined.sessionToken, pcmWav(21)))).toEqual([
+      422,
+      'SOUND_TOO_LONG',
+    ]);
+
+    const aliceSeesIt = nextState(alice, (s) => s.sounds.some((x) => x.label === 'Bob noise'));
+    const res = await uploadSound(code, joined.sessionToken, pcmWav(1.5), 'Bob noise');
+    expect(res.status).toBe(200);
+    const sound = (await res.json()) as SoundRef;
+    expect(sound).toMatchObject({
+      label: 'Bob noise',
+      durationMs: 1500,
+      uploadedBy: joined.playerId,
+    });
+    expect((await aliceSeesIt).sounds.at(-1)).toEqual(sound);
+
+    // Served to room members only, then gone (file included) once deleted.
+    expect((await fetch(`${baseUrl}${sound.url}`)).status).toBe(401);
+    expect((await fetch(`${baseUrl}${sound.url}?t=${created.sessionToken}`)).status).toBe(200);
+    const onDisk = () => fs.readdirSync(storage.roomDir(code)).filter((f) => f.startsWith('snd-'));
+    expect(onDisk()).toHaveLength(1);
+
+    for (let i = 1; i < 5; i++) {
+      expect((await uploadSound(code, joined.sessionToken, pcmWav(0.5), `extra ${i}`)).status).toBe(
+        200,
+      );
+    }
+    expect(await error(await uploadSound(code, joined.sessionToken, pcmWav(0.5)))).toEqual([
+      409,
+      'TOO_MANY_SOUNDS',
+    ]);
+
+    const deleted = nextState(alice, (s) => !s.sounds.some((x) => x.id === sound.id));
+    expect(await bob.emitWithAck('room:deleteSound', { soundId: sound.id })).toEqual({ ok: true });
+    await deleted;
+    expect((await fetch(`${baseUrl}${sound.url}?t=${created.sessionToken}`)).status).toBe(404);
+    await waitFor(() => onDisk().length === 4);
+  });
 });

@@ -1,5 +1,6 @@
 import fs from 'node:fs';
-import { expect, test, type Page } from '@playwright/test';
+import type { Page } from '@playwright/test';
+import { expect, test } from './fixtures';
 
 // A full game takes a while: about a minute with GAME_FAST=1 (when Playwright starts the server),
 // over 2 minutes at normal speed (when it reuses a running dev server).
@@ -22,10 +23,8 @@ async function voteForSomeoneElse(page: Page) {
   await page.getByRole('button', { name: 'Send my votes' }).click();
 }
 
-test('three players play a 2-round game from lobby back to lobby', async ({ browser }) => {
-  const pages = await Promise.all(
-    [0, 1, 2].map(async () => (await browser.newContext()).newPage()),
-  );
+test('three players play a 2-round game from lobby back to lobby', async ({ newPlayer }) => {
+  const pages = await Promise.all([0, 1, 2].map(() => newPlayer()));
   const [alice, bob, carol] = pages as [Page, Page, Page];
   // Count mic requests: each one can show the browser's permission prompt again (Firefox).
   for (const page of pages) {
@@ -46,8 +45,18 @@ test('three players play a 2-round game from lobby back to lobby', async ({ brow
   await alice.getByLabel('Rounds').fill('2');
   await expect(bob.getByText('Rounds').locator('..')).toContainText('2');
 
+  // No sound is ticked by default.
+  await expect(alice.getByRole('button', { name: 'Start game' })).toBeDisabled();
+  await alice.getByRole('button', { name: 'All', exact: true }).click();
+  await expect(bob.getByTestId('sound-count')).toHaveText(/^(\d+) of \1 in the game$/);
   await alice.getByRole('button', { name: 'Start game' }).click();
   for (const page of pages) await expect(phase(page)).toHaveText('New round');
+  // The status bar tells everyone when they're muted.
+  for (const page of pages) {
+    await expect(page.getByTestId('room-status')).toHaveText(/Everyone is muted/, {
+      timeout: 30_000,
+    });
+  }
 
   for (const round of [1, 2]) {
     // Everyone records (fake mic): playback then has all three attempts. ("Done" is too brief

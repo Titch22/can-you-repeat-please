@@ -45,11 +45,6 @@ export function VoiceBar({
       </div>
 
       {audioBlocked && <Button onClick={() => void enableAudio()}>Click to hear the others</Button>}
-      {gameMuted && (
-        <p className="rounded-xl bg-rose-500/10 px-3 py-2 text-sm text-rose-200">
-          Everyone is muted by the game while recording.
-        </p>
-      )}
       {micBlocked && (
         <p className="text-sm text-rose-300">
           Microphone unavailable. Allow mic access in your browser to talk and play; you can still

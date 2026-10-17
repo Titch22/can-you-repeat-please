@@ -22,14 +22,15 @@ export const RoomCodeSchema = z
 
 export const SettingsSchema = z.object({
   rounds: z.number().int().min(1).max(20),
-  soundSource: z.enum(['default', 'custom', 'mixed']),
+  /** Sounds the host ticked for the game (default pack or uploads). None by default. */
+  selectedSoundIds: z.array(z.string().max(100)).max(500),
   extraRecordMs: z.number().int().min(0).max(3000),
   votingMs: z.number().int().min(10_000).max(60_000),
 });
 
 export const DEFAULT_SETTINGS: z.infer<typeof SettingsSchema> = {
   rounds: 5,
-  soundSource: 'default',
+  selectedSoundIds: [],
   extraRecordMs: 1000,
   votingMs: 20_000,
 };
@@ -50,3 +51,4 @@ export const VotePayload = z.object({
 });
 export const TimeSyncPayload = z.object({ clientTime: z.number() });
 export const SetVoiceMutedPayload = z.object({ muted: z.boolean() });
+export const SoundLabelSchema = z.string().trim().min(1).max(40);

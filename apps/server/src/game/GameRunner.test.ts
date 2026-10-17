@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Phase, SoundRef } from '@cyrp/shared';
+import { MAX_CUSTOM_SOUND_MS, MAX_RECORDING_MS, type Phase, type SoundRef } from '@cyrp/shared';
 import { RoomError, RoomManager, type Room } from '../rooms/RoomManager.js';
 import { GameRunner } from './GameRunner.js';
 import type { Timing } from './timing.js';
@@ -35,6 +35,7 @@ function setup(names = ['Alice', 'Bob', 'Carol']) {
   });
   const { room, player: host } = rooms.create(names[0]!, '#ff0000', `s-${names[0]}`);
   const others = names.slice(1).map((n) => rooms.join(room.code, n, '#00ff00', `s-${n}`).player);
+  room.settings.selectedSoundIds = ['s1', 's2']; // nothing is ticked by default
   const players = [host, ...others];
   const id = (name: string) => players.find((p) => p.nickname === name)!.id;
   return { rooms, game, room, voice, discardRecordings, id };
@@ -197,6 +198,38 @@ describe('GameRunner', () => {
     game.vote(room.code, id('Alice'), ['clip-Bob']);
     game.vote(room.code, id('Bob'), ['clip-Alice']);
     expect(room.phase).toBe('ROUND_RESULTS');
+  });
+
+  it('only picks the sounds the host ticked, from the default pack and uploads', () => {
+    const { game, room, id } = setup(['Alice', 'Bob']);
+    room.customSounds.push({ ...sound('mine'), uploadedBy: id('Bob') });
+    room.settings.rounds = 6;
+    room.settings.selectedSoundIds = ['s2', 'mine'];
+    game.start(room.code, id('Alice'));
+    expect(new Set(room.game!.sounds.map((s) => s.id))).toEqual(new Set(['s2', 'mine']));
+  });
+
+  it('gives the longest custom sound its full recording window', () => {
+    const { game, room, id } = setup(['Alice', 'Bob']);
+    room.customSounds.push({
+      ...sound('long'),
+      durationMs: MAX_CUSTOM_SOUND_MS,
+      uploadedBy: id('Bob'),
+    });
+    room.settings.selectedSoundIds = ['long'];
+    room.settings.extraRecordMs = 3000;
+    game.start(room.code, id('Alice'));
+    advanceTo(room, 'RECORDING');
+    const { startsAt, endsAt } = room.game!.recording!;
+    expect(endsAt - startsAt).toBe(MAX_CUSTOM_SOUND_MS + 3000);
+    expect(endsAt - startsAt).toBeLessThanOrEqual(MAX_RECORDING_MS);
+  });
+
+  it('refuses to start when no sound is ticked', () => {
+    const { game, room, id } = setup(['Alice', 'Bob']);
+    room.settings.selectedSoundIds = [];
+    expect(errorCode(() => game.start(room.code, id('Alice')))).toBe('NOT_ENOUGH_SOUNDS');
+    expect(room.phase).toBe('LOBBY');
   });
 
   it('stops scheduling once the room is closed', () => {

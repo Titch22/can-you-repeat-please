@@ -7,7 +7,16 @@ import {
   type RemoteTrack,
 } from 'livekit-client';
 import { create } from 'zustand';
+import { unlockAudio } from './audio';
 import { getMicStream, releaseMic } from './mic';
+import {
+  isMeasured,
+  isSpeaking,
+  onSpeakingChange,
+  unwatchAll,
+  unwatchLevel,
+  watchLevel,
+} from './speaking';
 
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
@@ -80,11 +89,17 @@ function audioContainer() {
 }
 
 /** Recomputes who is speaking / has their mic on from the LiveKit room. */
+onSpeakingChange(() => refresh());
+
 function refresh() {
   if (!room) return;
   const peers: Record<string, PeerVoice> = {};
   for (const p of [room.localParticipant, ...room.remoteParticipants.values()]) {
-    peers[p.identity] = { speaking: p.isSpeaking, micOn: p.isMicrophoneEnabled };
+    const micOn = p.isMicrophoneEnabled;
+    // Our own measurement when we have one (see speaking.ts), LiveKit's otherwise. A muted or
+    // unpublished mic never counts: our own track keeps capturing during the game mute.
+    const speaking = micOn && (isMeasured(p.identity) ? isSpeaking(p.identity) : p.isSpeaking);
+    peers[p.identity] = { speaking, micOn };
   }
   useVoice.setState({ peers, micOn: room.localParticipant.isMicrophoneEnabled });
 }
@@ -113,9 +128,12 @@ async function syncMic() {
         // A clone, so muting voice never silences the recorder, which uses the original.
         micTrack = new LocalAudioTrack(source.clone(), undefined, true);
       }
-      if (!published)
+      if (!published) {
         await r.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone });
-      else if (micTrack.isMuted) await micTrack.unmute();
+        watchLevel(r.localParticipant.identity, micTrack.mediaStreamTrack);
+      } else if (micTrack.isMuted) {
+        await micTrack.unmute();
+      }
     } else if (micTrack && published && !micTrack.isMuted) {
       await micTrack.mute();
     }
@@ -134,14 +152,16 @@ function wire(r: Room) {
     el.dataset.identity = identity;
     audioContainer().appendChild(el);
     r.remoteParticipants.get(identity)?.setVolume(effectiveVolume(identity));
+    watchLevel(identity, track.mediaStreamTrack);
   };
 
   r.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
     attach(track, participant.identity);
     refresh();
   });
-  r.on(RoomEvent.TrackUnsubscribed, (track) => {
+  r.on(RoomEvent.TrackUnsubscribed, (track, _pub, participant) => {
     track.detach().forEach((el) => el.remove());
+    if (track.kind === Track.Kind.Audio) unwatchLevel(participant.identity);
     refresh();
   });
   for (const event of [
@@ -215,6 +235,7 @@ export async function disconnectVoice() {
   room = null;
   useVoice.setState({ status: 'idle', micOn: false, peers: {}, audioBlocked: false });
   if (r) await r.disconnect();
+  unwatchAll();
   micTrack?.stop();
   micTrack = null;
   await releaseMic();
@@ -239,7 +260,7 @@ export function setDucked(ducked: boolean) {
 
 /** Must run from a click handler when the browser blocked autoplay. */
 export async function enableAudio() {
-  await room?.startAudio();
+  await Promise.all([room?.startAudio(), unlockAudio()]);
   useVoice.setState({ audioBlocked: room ? !room.canPlaybackAudio : false });
 }
 

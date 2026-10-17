@@ -5,6 +5,7 @@ import {
   RoomCreatePayload,
   RoomJoinPayload,
   RoomResumePayload,
+  DeleteSoundPayload,
   VotePayload,
   SetVoiceMutedPayload,
   TimeSyncPayload,
@@ -46,6 +47,8 @@ function handler<S extends z.ZodType, R extends object>(
 }
 
 export interface HandlerDeps {
+  /** Removes an uploaded sound and its file. */
+  deleteSound(code: string, playerId: string, soundId: string): void;
   game: GameRunner;
   setVoiceMuted(code: string, muted: boolean): Promise<void>;
   /** Registers debug-only events. */
@@ -118,6 +121,14 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
       handler(KickPayload, ({ playerId: targetId }) => {
         const { code, playerId } = membership();
         rooms.kick(code, playerId, targetId);
+      }),
+    );
+
+    socket.on(
+      'room:deleteSound',
+      handler(DeleteSoundPayload, ({ soundId }) => {
+        const { code, playerId } = membership();
+        deps.deleteSound(code, playerId, soundId);
       }),
     );
 
