@@ -1,7 +1,8 @@
 import { expect, test, type Page } from '@playwright/test';
 
-// A full game takes a while even with GAME_FAST=1 (see playwright.config.ts).
-test.setTimeout(120_000);
+// A full game takes a while: about a minute with GAME_FAST=1 (when Playwright starts the server),
+// over 2 minutes at normal speed (when it reuses a running dev server).
+test.setTimeout(240_000);
 
 async function join(page: Page, nickname: string, code?: string) {
   await page.goto(code ? `/r/${code}` : '/');

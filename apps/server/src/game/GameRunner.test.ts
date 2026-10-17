@@ -10,6 +10,8 @@ const T: Timing = {
   referenceTailMs: 100,
   countdownMs: 100,
   uploadGraceMs: 500,
+  afterRecordingMs: 200,
+  playbackIntroMs: 150,
   playbackLeadMs: 50,
   playbackGapMs: 50,
   resultsMs: 200,
@@ -82,14 +84,20 @@ describe('GameRunner', () => {
     // Clips stay hidden until playback.
     expect(rooms.toState(room, id('Bob')).clips).toEqual([]);
 
-    // Uploads arrive once the recording window has closed; the last one ends the phase.
+    // Uploads arrive once the recording window has closed. With all of them in, the phase
+    // still holds a "Time's up!" pause before playback.
     vi.setSystemTime(endsAt + 10);
     for (const name of ['Alice', 'Bob', 'Carol']) {
       game.beginUpload(room, id(name), 1);
       game.finishUpload(room, id(name), `clip-${name}`);
     }
-    expect(room.phase).toBe('PLAYBACK');
+    expect(room.phase).toBe('RECORDING');
+    expect(room.game!.deadline).toBe(endsAt + T.afterRecordingMs);
+    advanceTo(room, 'PLAYBACK');
+    expect(Date.now()).toBeGreaterThanOrEqual(endsAt + T.afterRecordingMs);
     expect(voice).toEqual([true, false]);
+    // A longer pause before the first sound, then the shorter lead for the next ones.
+    expect(room.game!.playback!.startsAt - Date.now()).toBe(T.playbackIntroMs);
     const items = room.game!.playback!.items;
     expect(items.map((i) => i.kind)).toEqual(['reference', 'clip', 'clip', 'clip']);
     expect(rooms.toState(room, id('Bob')).myClipId).toBe('clip-Bob');
@@ -172,7 +180,8 @@ describe('GameRunner', () => {
     game.finishUpload(room, id('Bob'), 'clip-Bob');
     expect(room.phase).toBe('RECORDING'); // still waiting for Carol
     rooms.disconnect(room.code, id('Carol'), 's-Carol');
-    expect(room.phase).toBe('PLAYBACK');
+    expect(room.game!.deadline).toBe(room.game!.recording!.endsAt + T.afterRecordingMs);
+    advanceTo(room, 'PLAYBACK');
 
     const { player: dave } = rooms.join(room.code, 'Dave', '#0000ff', 's-Dave');
     expect(dave.isSpectator).toBe(true);

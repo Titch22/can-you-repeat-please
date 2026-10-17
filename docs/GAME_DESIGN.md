@@ -42,14 +42,16 @@
 
 ## Round flow
 
-| #   | Phase             | Length                              | Voice chat         | What happens                                                                                                                           |
-| --- | ----------------- | ----------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Round intro**   | 3s                                  | on                 | "Round 2/5" title card                                                                                                                 |
-| 2   | **Reference**     | sound length + 1s                   | on, volume lowered | The reference sound plays for everyone at the same time                                                                                |
-| 3   | **Recording**     | sound length + extra time (max 10s) | **muted**          | A 3-2-1 countdown, then everyone records at the same time. A level meter shows the mic is picking up sound                             |
-| 4   | **Playback**      | about (clip length + 1s) × players  | on, volume lowered | The reference plays once more, then each recording plays in turn, in shuffled order and **anonymously**                                |
-| 5   | **Voting**        | voting time                         | on                 | Each player upvotes **up to 2** recordings, not their own. Clips can be replayed locally. The phase ends early once everyone has voted |
-| 6   | **Round results** | 6s                                  | on                 | Names are revealed, with votes received this round and total scores                                                                    |
+Pause lengths are set in `apps/server/src/game/timing.ts`.
+
+| #   | Phase             | Length                                          | Voice chat         | What happens                                                                                                                                                   |
+| --- | ----------------- | ----------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Round intro**   | 3s                                              | on                 | "Round 2/5" title card                                                                                                                                         |
+| 2   | **Reference**     | sound length + 3s                               | on, volume lowered | The reference sound plays for everyone at the same time, then "Get ready to repeat it!"                                                                        |
+| 3   | **Recording**     | 3s + sound length + extra time (max 10s) + 2.5s | **muted**          | A 3-2-1 countdown, then everyone records at the same time. A level meter shows the mic is picking up sound. Then "Time's up!" while the last recordings arrive |
+| 4   | **Playback**      | 3s + (clip length + 1.5s) × (players + 1)       | on, volume lowered | "Here come the attempts!", then the reference plays once more, then each recording plays in turn, in shuffled order and **anonymously**                        |
+| 5   | **Voting**        | voting time                                     | on                 | Each player upvotes **up to 2** recordings, not their own. Clips can be replayed locally. The phase ends early once everyone has voted                         |
+| 6   | **Round results** | 6s                                              | on                 | Names are revealed, with votes received this round and total scores                                                                                            |
 
 After the last round comes **Final results**: a podium and per-round highlights (the most-voted clip of each round). The host can then send everyone back to the lobby. Settings and custom sounds are kept.
 

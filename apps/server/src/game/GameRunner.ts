@@ -28,6 +28,8 @@ export interface GameRunnerDeps {
  */
 export class GameRunner {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Voice mute changes waiting for the new phase's deadline to be set (see enter()). */
+  private pendingMute = new Map<string, boolean>();
   private rng: Rng;
   private now: () => number;
 
@@ -136,6 +138,7 @@ export class GameRunner {
   /** The room closed: forget its timer. */
   stop(code: string) {
     this.clearTimer(code);
+    this.pendingMute.delete(code);
   }
 
   // ── Phases ──────────────────────────────────────────────────────────────────
@@ -177,13 +180,18 @@ export class GameRunner {
     );
     g.recording = { startsAt, endsAt: startsAt + length };
     this.enter(room, 'RECORDING');
-    this.schedule(room, g.recording.endsAt + timing.uploadGraceMs, () => this.endRecording(room));
+    const lastUpload = Math.max(timing.uploadGraceMs, timing.afterRecordingMs);
+    this.schedule(room, g.recording.endsAt + lastUpload, () => this.endRecording(room));
   }
 
+  /** Once every recording is in, wait out the "Time's up!" pause, then move on. */
   private maybeEndRecordingEarly(room: Room) {
     const g = this.game(room);
     if (room.phase !== 'RECORDING' || !g.recording || this.now() < g.recording.endsAt) return;
-    if (this.everyone(room, (id) => g.recordings.has(id))) this.endRecording(room);
+    if (!this.everyone(room, (id) => g.recordings.has(id))) return;
+    const at = g.recording.endsAt + this.deps.timing.afterRecordingMs;
+    if (this.now() >= at) this.endRecording(room);
+    else if (g.deadline !== at) this.schedule(room, at, () => this.endRecording(room));
   }
 
   private endRecording(room: Room) {
@@ -215,7 +223,7 @@ export class GameRunner {
   private playItem(room: Room, items: PlaybackItem[], index: number) {
     const g = this.game(room);
     const { timing } = this.deps;
-    const startsAt = this.now() + timing.playbackLeadMs;
+    const startsAt = this.now() + (index === 0 ? timing.playbackIntroMs : timing.playbackLeadMs);
     g.playback = { items, index, startsAt };
     this.enter(room, 'PLAYBACK');
     this.schedule(room, startsAt + items[index]!.durationMs + timing.playbackGapMs, () =>
@@ -246,21 +254,31 @@ export class GameRunner {
     this.clearTimer(room.code);
     this.game(room).deadline = null;
     this.enter(room, 'FINAL_RESULTS');
+    this.applyVoiceMute(room);
     this.deps.rooms.changed(room);
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
 
-  /** Switches phase; voice is muted exactly while in RECORDING. */
+  /**
+   * Switches phase. Voice is muted exactly while in RECORDING; the change is applied once the
+   * caller has set the new deadline (schedule/toFinal), because muting broadcasts the room
+   * and clients must not see the new phase with the previous phase's deadline.
+   */
   private enter(room: Room, phase: Phase) {
     const wasRecording = room.phase === 'RECORDING';
     room.phase = phase;
     const muted = phase === 'RECORDING';
-    if (muted !== wasRecording) {
-      this.deps
-        .setVoiceMuted(room.code, muted)
-        .catch((err) => console.error('[game] voice mute failed', err));
-    }
+    if (muted !== wasRecording) this.pendingMute.set(room.code, muted);
+  }
+
+  private applyVoiceMute(room: Room) {
+    const muted = this.pendingMute.get(room.code);
+    if (muted === undefined) return;
+    this.pendingMute.delete(room.code);
+    this.deps
+      .setVoiceMuted(room.code, muted)
+      .catch((err) => console.error('[game] voice mute failed', err));
   }
 
   /** Sets the phase deadline, runs `next` at that time, and broadcasts the new state. */
@@ -277,6 +295,7 @@ export class GameRunner {
       Math.max(0, at - this.now()),
     );
     this.timers.set(room.code, timer);
+    this.applyVoiceMute(room);
     this.deps.rooms.changed(room);
   }
 

@@ -39,9 +39,12 @@ export function ReferencePhase({ room }: PhaseProps) {
   const now = useServerNow(100);
   if (!ref) return null;
   const playing = now >= ref.startsAt;
+  const ended = now >= ref.startsAt + ref.durationMs;
   return (
     <div className="flex flex-col items-center gap-4 py-8 text-center">
-      <p className="text-slate-400">{playing ? 'Listen carefully!' : 'Here it comes…'}</p>
+      <p className={ended ? 'font-bold text-amber-300' : 'text-slate-400'}>
+        {ended ? 'Get ready to repeat it!' : playing ? 'Listen carefully!' : 'Here it comes…'}
+      </p>
       <p className="text-4xl font-black">{ref.label}</p>
       <div className="w-full max-w-sm">
         <ProgressBar from={ref.startsAt} to={ref.startsAt + ref.durationMs} />
@@ -80,6 +83,7 @@ export function RecordingPhase({ room, me }: PhaseProps) {
   return (
     <div className="flex flex-col items-center gap-5 py-8 text-center" data-testid="recorder">
       <p className="text-slate-400">Everyone is muted while recording.</p>
+      {now >= rec.endsAt && <p className="text-5xl font-black">Time’s up!</p>}
       {status === 'countdown' && countdown > 0 ? (
         <p className="text-7xl font-black tabular-nums">{countdown}</p>
       ) : (
@@ -118,9 +122,23 @@ export function PlaybackPhase({ room }: PhaseProps) {
   const pb = room.playback;
   const item = pb?.items[pb.index];
   useScheduledSound(item?.url, pb?.startsAt);
+  const now = useServerNow(100);
   if (!pb || !item) return null;
   const attempt = pb.items.slice(0, pb.index + 1).filter((i) => i.kind === 'clip').length;
   const total = pb.items.filter((i) => i.kind === 'clip').length;
+
+  // Pause before the first sound.
+  if (pb.index === 0 && now < pb.startsAt) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-10 text-center" data-testid="playback">
+        <p className="text-4xl font-black">Here come the attempts!</p>
+        <p className="text-slate-400">
+          The original first, then {total} {total === 1 ? 'attempt' : 'attempts'}, anonymously.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center gap-4 py-8 text-center" data-testid="playback">
       {item.kind === 'reference' ? (

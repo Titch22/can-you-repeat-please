@@ -6,13 +6,17 @@ export interface Timing {
   introMs: number;
   /** Delay before a scheduled sound starts, so every client has time to preload it. */
   referenceLeadMs: number;
-  /** Silence after the reference before recording starts. */
+  /** Pause after the reference ends ("Get ready to repeat it!"), before the 3-2-1. */
   referenceTailMs: number;
   /** 3-2-1 before the recording window opens. */
   countdownMs: number;
   /** Uploads still accepted after the recording window closes. */
   uploadGraceMs: number;
-  /** Delay before each playback item, for the "now playing" switch to reach clients. */
+  /** Minimum pause after the recording window ("Time's up!"), even if every upload is in. */
+  afterRecordingMs: number;
+  /** Pause before the first playback item ("Here come the attempts!"). */
+  playbackIntroMs: number;
+  /** Delay before each later playback item, for the "now playing" switch to reach clients. */
   playbackLeadMs: number;
   /** Silence after each playback item. */
   playbackGapMs: number;
@@ -22,11 +26,13 @@ export interface Timing {
 export const DEFAULT_TIMING: Timing = {
   introMs: 3000,
   referenceLeadMs: 1500,
-  referenceTailMs: 1000,
+  referenceTailMs: 3000,
   countdownMs: 3000,
   uploadGraceMs: RECORDING_UPLOAD_GRACE_MS,
+  afterRecordingMs: 2500,
+  playbackIntroMs: 3000,
   playbackLeadMs: 400,
-  playbackGapMs: 900,
+  playbackGapMs: 1500,
   resultsMs: 6000,
 };
 
@@ -37,6 +43,8 @@ export const FAST_TIMING: Timing = {
   referenceTailMs: 300,
   countdownMs: 1000,
   uploadGraceMs: RECORDING_UPLOAD_GRACE_MS,
+  afterRecordingMs: 300,
+  playbackIntroMs: 500,
   playbackLeadMs: 300,
   playbackGapMs: 300,
   resultsMs: 1500,
