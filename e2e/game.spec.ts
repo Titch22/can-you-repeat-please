@@ -25,6 +25,18 @@ test('three players play a 2-round game from lobby back to lobby', async ({ brow
     [0, 1, 2].map(async () => (await browser.newContext()).newPage()),
   );
   const [alice, bob, carol] = pages as [Page, Page, Page];
+  // Count mic requests: each one can show the browser's permission prompt again (Firefox).
+  for (const page of pages) {
+    await page.addInitScript(() => {
+      const w = window as typeof window & { micRequests: number };
+      w.micRequests = 0;
+      const original = navigator.mediaDevices.getUserMedia.bind(navigator.mediaDevices);
+      navigator.mediaDevices.getUserMedia = (constraints) => {
+        w.micRequests++;
+        return original(constraints);
+      };
+    });
+  }
 
   const code = await join(alice, 'Alice');
   await join(bob, 'Bob', code);
@@ -67,4 +79,11 @@ test('three players play a 2-round game from lobby back to lobby', async ({ brow
   await expect(bob.getByRole('button', { name: 'Back to the lobby' })).toHaveCount(0);
   await alice.getByRole('button', { name: 'Back to the lobby' }).click();
   for (const page of pages) await expect(page.getByTestId('room-code')).toHaveText(code);
+
+  // One mic stream for the whole session, shared by voice and every recording.
+  for (const page of pages) {
+    expect(
+      await page.evaluate(() => (window as typeof window & { micRequests: number }).micRequests),
+    ).toBe(1);
+  }
 });

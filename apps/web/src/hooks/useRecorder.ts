@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { RoomState } from '@cyrp/shared';
 import { audioContext } from '../lib/audio';
 import { serverNow } from '../lib/clock';
+import { getMicStream } from '../lib/mic';
 import { loadSession } from '../lib/storage';
 
 export type RecorderStatus =
@@ -11,8 +12,8 @@ const MIME_TYPES = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp
 
 /**
  * Records the player during the round's recording window and uploads the result.
- * Uses its own mic stream (not the voice one) with noise suppression and auto gain off,
- * so weird noises survive.
+ * Records from the shared mic stream (see lib/mic.ts), which is never stopped here: asking
+ * for the mic again each round would show the browser's permission prompt again.
  */
 export function useRecorder(room: RoomState, canRecord: boolean) {
   const [status, setStatus] = useState<RecorderStatus>('idle');
@@ -25,8 +26,9 @@ export function useRecorder(room: RoomState, canRecord: boolean) {
     if (!key) return;
     const [code, round, startsAt, endsAt] = key.split(':') as [string, string, string, string];
     let stopped = false;
-    let stream: MediaStream | null = null;
     let frame = 0;
+    let recorder: MediaRecorder | null = null;
+    let meterSource: MediaStreamAudioSourceNode | null = null;
     const timers: ReturnType<typeof setTimeout>[] = [];
 
     const upload = async (blob: Blob) => {
@@ -45,20 +47,20 @@ export function useRecorder(room: RoomState, canRecord: boolean) {
 
     void (async () => {
       setStatus('preparing');
+      let stream: MediaStream;
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: true, noiseSuppression: false, autoGainControl: false },
-        });
+        stream = await getMicStream();
       } catch {
         setStatus('no-mic');
         return;
       }
-      if (stopped) return stream.getTracks().forEach((t) => t.stop());
+      if (stopped) return;
 
       // Level meter.
       const analyser = audioContext().createAnalyser();
       analyser.fftSize = 512;
-      audioContext().createMediaStreamSource(stream).connect(analyser);
+      meterSource = audioContext().createMediaStreamSource(stream);
+      meterSource.connect(analyser);
       const samples = new Float32Array(analyser.fftSize);
       const meter = () => {
         analyser.getFloatTimeDomainData(samples);
@@ -69,15 +71,16 @@ export function useRecorder(room: RoomState, canRecord: boolean) {
       meter();
 
       const mimeType = MIME_TYPES.find((t) => MediaRecorder.isTypeSupported(t));
-      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      const rec = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+      recorder = rec;
       const chunks: Blob[] = [];
-      recorder.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
-      recorder.onstop = () => {
+      rec.ondataavailable = (e) => e.data.size > 0 && chunks.push(e.data);
+      rec.onstop = () => {
         cancelAnimationFrame(frame);
-        stream?.getTracks().forEach((t) => t.stop());
+        meterSource?.disconnect();
         setLevel(0);
         // Upload even if the component unmounted meanwhile: the server still wants it.
-        void upload(new Blob(chunks, { type: recorder.mimeType }));
+        void upload(new Blob(chunks, { type: rec.mimeType }));
       };
 
       setStatus('countdown');
@@ -85,11 +88,11 @@ export function useRecorder(room: RoomState, canRecord: boolean) {
         setTimeout(
           () => {
             if (stopped) return;
-            recorder.start();
+            rec.start();
             setStatus('recording');
             timers.push(
               setTimeout(
-                () => recorder.state === 'recording' && recorder.stop(),
+                () => rec.state === 'recording' && rec.stop(),
                 Number(endsAt) - serverNow(),
               ),
             );
@@ -103,7 +106,9 @@ export function useRecorder(room: RoomState, canRecord: boolean) {
       stopped = true;
       timers.forEach(clearTimeout);
       cancelAnimationFrame(frame);
-      stream?.getTracks().forEach((t) => t.stop());
+      meterSource?.disconnect();
+      // Phase ended mid-recording: stop (which uploads what we have). The mic itself stays open.
+      if (recorder?.state === 'recording') recorder.stop();
     };
   }, [key]);
 

@@ -1,5 +1,13 @@
-import { ConnectionState, Room, RoomEvent, Track, type RemoteTrack } from 'livekit-client';
+import {
+  ConnectionState,
+  LocalAudioTrack,
+  Room,
+  RoomEvent,
+  Track,
+  type RemoteTrack,
+} from 'livekit-client';
 import { create } from 'zustand';
+import { getMicStream, releaseMic } from './mic';
 
 export type VoiceStatus = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error';
 
@@ -52,6 +60,11 @@ function applyVolumes() {
 }
 
 let room: Room | null = null;
+/**
+ * Our mic track, built from the shared mic stream (see mic.ts). Muted or unpublished, never
+ * stopped, so LiveKit never asks the browser for the mic again.
+ */
+let micTrack: LocalAudioTrack | null = null;
 /** Bumped on every connect/disconnect so a stale async connect can tell it lost the race. */
 let generation = 0;
 
@@ -76,13 +89,36 @@ function refresh() {
   useVoice.setState({ peers, micOn: room.localParticipant.isMicrophoneEnabled });
 }
 
-/** Publishes or unpublishes the mic to match "player wants it" AND "server allows it". */
-async function applyMic() {
+let micQueue: Promise<void> = Promise.resolve();
+
+/** Publishes, mutes or unpublishes the mic to match "player wants it" AND "server allows it". */
+function applyMic() {
+  // Serialized: two quick toggles must not publish the track twice.
+  micQueue = micQueue.then(syncMic, syncMic);
+  return micQueue;
+}
+
+async function syncMic() {
   const r = room;
   if (!r) return;
   const { micWanted, canPublish } = useVoice.getState();
+  const published = !!r.localParticipant.getTrackPublication(Track.Source.Microphone);
   try {
-    await r.localParticipant.setMicrophoneEnabled(micWanted && canPublish);
+    if (!canPublish) {
+      // The server revokes publishing during recording; unpublish without stopping the track.
+      if (micTrack && published) await r.localParticipant.unpublishTrack(micTrack, false);
+    } else if (micWanted) {
+      if (!micTrack) {
+        const source = (await getMicStream()).getAudioTracks()[0]!;
+        // A clone, so muting voice never silences the recorder, which uses the original.
+        micTrack = new LocalAudioTrack(source.clone(), undefined, true);
+      }
+      if (!published)
+        await r.localParticipant.publishTrack(micTrack, { source: Track.Source.Microphone });
+      else if (micTrack.isMuted) await micTrack.unmute();
+    } else if (micTrack && published && !micTrack.isMuted) {
+      await micTrack.mute();
+    }
     useVoice.setState({ micBlocked: false });
   } catch (err) {
     console.warn('[voice] microphone unavailable', err);
@@ -153,7 +189,8 @@ export async function connectVoice(code: string, sessionToken: string) {
     const { url, token } = (await res.json()) as { url: string; token: string };
     if (gen !== generation) return;
 
-    const r = new Room({ adaptiveStream: true, dynacast: true });
+    // Keep our mic track alive when the server unpublishes it (game mute).
+    const r = new Room({ adaptiveStream: true, dynacast: true, stopLocalTrackOnUnpublish: false });
     room = r;
     wire(r);
     await r.connect(url, token);
@@ -178,6 +215,9 @@ export async function disconnectVoice() {
   room = null;
   useVoice.setState({ status: 'idle', micOn: false, peers: {}, audioBlocked: false });
   if (r) await r.disconnect();
+  micTrack?.stop();
+  micTrack = null;
+  await releaseMic();
   document.getElementById('voice-audio')?.replaceChildren();
 }
 
