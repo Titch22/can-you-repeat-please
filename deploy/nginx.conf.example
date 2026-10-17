@@ -1,0 +1,47 @@
+# nginx sites for the game. Copy to /etc/nginx/sites-available/cyrp, replace the two
+# hostnames, enable it, then run certbot to add HTTPS. See docs/DEPLOYMENT.md.
+
+# WebSocket upgrade helper. If another site already defines $connection_upgrade, delete this block.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# The game: web app, API, Socket.IO.
+server {
+    listen 80;
+    listen [::]:80;
+    server_name game.example.com;
+
+    # Recording uploads are at most 2 MB.
+    client_max_body_size 3m;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # Socket.IO connections stay open for the whole session.
+        proxy_read_timeout 1h;
+    }
+}
+
+# LiveKit signaling (media itself goes straight to ports 7881/tcp and 7882/udp).
+server {
+    listen 80;
+    listen [::]:80;
+    server_name voice.example.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:7880;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 1h;
+    }
+}

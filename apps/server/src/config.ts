@@ -19,5 +19,7 @@ export const config = {
   paths: {
     defaultSounds: path.join(repoRoot, 'sounds/default'),
     tmpRooms: path.join(repoRoot, 'tmp/rooms'),
+    /** Built web app (`pnpm --filter @cyrp/web build`); served when present, i.e. in production. */
+    webDist: path.join(repoRoot, 'apps/web/dist'),
   },
 };

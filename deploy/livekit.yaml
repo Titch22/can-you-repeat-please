@@ -1,0 +1,16 @@
+# LiveKit server config for production. API keys come from the LIVEKIT_KEYS env var
+# (set by docker-compose.yml from deploy/.env).
+port: 7880
+rtc:
+  # WebRTC over TCP, for networks that block UDP.
+  tcp_port: 7881
+  # All UDP media multiplexed on one port: one firewall rule instead of a range.
+  udp_port: 7882
+  # Discover the VPS's public IP (via STUN) and advertise it to browsers, instead of the
+  # container's internal address.
+  use_external_ip: true
+room:
+  # Our server creates/deletes rooms; empty ones can go away quickly.
+  empty_timeout: 60
+logging:
+  level: info

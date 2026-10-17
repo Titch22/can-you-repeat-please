@@ -1,0 +1,36 @@
+# Production stack. Run from this folder: docker compose up -d --build
+# Settings come from deploy/.env (copy .env.example). See docs/DEPLOYMENT.md.
+name: cyrp
+
+services:
+  game:
+    build: ..
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      CLIENT_ORIGIN: https://${GAME_DOMAIN:?set GAME_DOMAIN in deploy/.env}
+      LIVEKIT_URL: ws://livekit:7880
+      LIVEKIT_PUBLIC_URL: wss://${VOICE_DOMAIN:?set VOICE_DOMAIN in deploy/.env}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in deploy/.env}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in deploy/.env}
+    ports:
+      # Only nginx on this machine talks to it.
+      - 127.0.0.1:3000:3000
+    depends_on:
+      - livekit
+
+  livekit:
+    image: livekit/livekit-server:v1.13.10
+    restart: unless-stopped
+    command: --config /etc/livekit.yaml
+    environment:
+      LIVEKIT_KEYS: '${LIVEKIT_API_KEY}: ${LIVEKIT_API_SECRET}'
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml:ro
+    ports:
+      # Signaling (wss), proxied by nginx.
+      - 127.0.0.1:7880:7880
+      # Media: must be reachable from the internet (open them in the firewall).
+      - 7881:7881/tcp
+      - 7882:7882/udp

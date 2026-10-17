@@ -1,0 +1,140 @@
+# Deployment
+
+How to run the game on a Debian VPS that already has Docker and nginx. Everything runs in two containers; your nginx handles HTTPS in front of them.
+
+```
+                 ┌──────────────── VPS ─────────────────────────────────────────┐
+ browsers ─443─► │ nginx (HTTPS, certbot)                                      │
+                 │   game.example.com  ──► 127.0.0.1:3000  game container      │
+                 │   voice.example.com ──► 127.0.0.1:7880  livekit (signaling) │
+ browsers ─────► │ 7881/tcp, 7882/udp  ──────────────────► livekit (media)     │
+                 └─────────────────────────────────────────────────────────────┘
+```
+
+- **game**: built from the repo's `Dockerfile`. One Node process serves the web app, the API and Socket.IO.
+- **livekit**: the official LiveKit image, configured by `deploy/livekit.yaml`.
+- **HTTPS is required**: browsers only allow microphone access on secure pages.
+- **One instance only**: rooms live in memory. Restarting the game container ends the games in progress, so deploy when nobody is playing.
+
+All deployment files are in [`deploy/`](../deploy).
+
+## 1. Prerequisites
+
+On the server:
+
+- Docker with the Compose plugin (`docker compose version`)
+- nginx and certbot: `sudo apt install nginx certbot python3-certbot-nginx`
+- git, and access to the repository (a deploy key or HTTPS token for a private repo)
+
+## 2. DNS
+
+Create two records pointing to the server's IP. Add AAAA records too if the server has IPv6.
+
+| Name                  | Type | Value     |
+| --------------------- | ---- | --------- |
+| `game.<your domain>`  | A    | server IP |
+| `voice.<your domain>` | A    | server IP |
+
+## 3. Firewall
+
+Open these ports, both in your provider's firewall (security group) and in `ufw` if you use it:
+
+| Port | Protocol | For                             |
+| ---- | -------- | ------------------------------- |
+| 80   | TCP      | HTTP, certificate issuance      |
+| 443  | TCP      | HTTPS: game and voice signaling |
+| 7881 | TCP      | Voice media over TCP (fallback) |
+| 7882 | UDP      | Voice media                     |
+
+```bash
+sudo ufw allow 80/tcp && sudo ufw allow 443/tcp
+sudo ufw allow 7881/tcp && sudo ufw allow 7882/udp
+```
+
+> Docker publishes ports without going through `ufw`. That's why the game (3000) and LiveKit signaling (7880) are bound to `127.0.0.1` in `docker-compose.yml`: only nginx can reach them.
+
+## 4. Get the code and configure it
+
+```bash
+sudo git clone <repo url> /opt/cyrp
+sudo chown -R "$USER" /opt/cyrp
+cd /opt/cyrp/deploy
+cp .env.example .env
+```
+
+Edit `deploy/.env`:
+
+```bash
+GAME_DOMAIN=game.yourdomain.com
+VOICE_DOMAIN=voice.yourdomain.com
+LIVEKIT_API_KEY=cyrp3f9a1c2b7d4e        # echo "cyrp$(openssl rand -hex 6)"
+LIVEKIT_API_SECRET=...                  # openssl rand -hex 32
+```
+
+`deploy/.env` holds secrets: it is git-ignored, so never commit it.
+
+## 5. Start the containers
+
+```bash
+cd /opt/cyrp/deploy
+docker compose up -d --build
+docker compose ps                       # both "running"; game becomes "healthy"
+curl -s 127.0.0.1:3000/api/health       # {"ok":true}
+docker compose logs livekit | grep -i "external ip"
+```
+
+LiveKit should report `found external IP via STUN` with your server's public IP, without a "could not validate" warning. If the warning appears, port 7882/udp or 7881/tcp is not reachable: check the firewall.
+
+## 6. nginx and HTTPS
+
+```bash
+sudo cp /opt/cyrp/deploy/nginx.conf.example /etc/nginx/sites-available/cyrp
+sudo sed -i 's/game.example.com/game.yourdomain.com/; s/voice.example.com/voice.yourdomain.com/' \
+  /etc/nginx/sites-available/cyrp
+sudo ln -s /etc/nginx/sites-available/cyrp /etc/nginx/sites-enabled/cyrp
+sudo nginx -t && sudo systemctl reload nginx
+sudo certbot --nginx -d game.yourdomain.com -d voice.yourdomain.com
+```
+
+If `nginx -t` complains about a duplicate `map` / `$connection_upgrade`, another site already defines it. Delete the `map` block at the top of the file.
+
+certbot adds the HTTPS config and the HTTP → HTTPS redirect, and renews the certificates automatically.
+
+## 7. Check it works
+
+1. Open `https://game.yourdomain.com` and create a room. The voice status should switch to **Voice connected**.
+2. Join from a second device on **another network** (a phone on mobile data). Voice must work across networks, not only on your Wi-Fi.
+3. Play a round: recording, playback and voting.
+
+## Updating
+
+```bash
+cd /opt/cyrp && git pull
+cd deploy && docker compose up -d --build
+docker image prune -f                   # clean up old images
+```
+
+This restarts the game container and ends games in progress.
+
+## Operations
+
+```bash
+cd /opt/cyrp/deploy
+docker compose logs -f game             # game server logs
+docker compose logs -f livekit          # voice server logs
+docker compose restart game
+docker compose down                     # stop everything
+```
+
+The containers restart on their own after a crash or a reboot (`restart: unless-stopped`). Nothing needs backing up: all game audio is temporary by design and is wiped at every start.
+
+## Troubleshooting
+
+| Symptom                                       | Likely cause                                                                                                                                     |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Stuck on "Joining voice…", then "unavailable" | 7882/udp and 7881/tcp blocked (provider firewall!), or `VOICE_DOMAIN` doesn't resolve. Check `docker compose logs livekit`.                      |
+| Voice works on Wi-Fi but not from outside     | Same: media ports not open to the internet.                                                                                                      |
+| Browser never asks for the microphone         | The page isn't served over HTTPS.                                                                                                                |
+| "Connection lost, reconnecting…" loops        | WebSocket upgrade headers missing in nginx (`Upgrade` / `Connection`).                                                                           |
+| Recordings fail with 413                      | nginx `client_max_body_size` too small for the game site (needs ≥ 3m).                                                                           |
+| Voice fails only on strict corporate networks | Those block everything except 443. It needs LiveKit's built-in TURN/TLS server, which requires a third hostname and certificate; not set up yet. |

@@ -112,7 +112,10 @@ tmp/rooms/<code>/          ephemeral, one dir per room
 - Uploads are rate-limited and size-limited. Uploaded files are never executed or transcoded on the server.
 - LiveKit tokens are short-lived and scoped to one room.
 
-## Deployment (M5)
+## Deployment
 
-- **Game server and static web build:** a single Node service on Fly.io or Render. The temp dir lives on the instance's local disk, which is fine since all audio is ephemeral.
-- **LiveKit:** LiveKit Cloud (free tier) or a self-hosted `livekit-server`, configured with `LIVEKIT_URL`, `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET`.
+Self-hosted on a VPS with Docker Compose behind the host's nginx: see [DEPLOYMENT.md](DEPLOYMENT.md).
+
+- **Game container** (`Dockerfile`): one Node process serves the built web app (with a fallback to `index.html` for client routes), the API and Socket.IO, so everything is same-origin. Temp audio lives on the container's disk, which is fine since it's ephemeral.
+- **LiveKit container**: signaling proxied by nginx (`wss://voice.…`), media on 7881/tcp and 7882/udp, public IP discovered via STUN (`use_external_ip`).
+- In production (`NODE_ENV=production`) the debug socket events are off.

@@ -1,4 +1,6 @@
+import fs from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
 import express from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
@@ -29,6 +31,8 @@ export function createApp({
   debug = config.debug,
 }: AppDeps) {
   const app = express();
+  // Behind one reverse proxy (nginx) in production: trust its X-Forwarded-* headers.
+  app.set('trust proxy', 1);
   app.use(cors({ origin: config.clientOrigin }));
   app.use(express.json());
 
@@ -116,6 +120,7 @@ export function createApp({
   app.use(voiceRoutes(rooms, voice));
   app.use(audioRoutes(rooms, game, storage));
   registerRoomHandlers(io, rooms, { game, setVoiceMuted, debug });
+  serveWebApp(app);
 
   const sweep = setInterval(() => rooms.sweepIdle(), 60_000);
   sweep.unref();
@@ -127,4 +132,20 @@ export function createApp({
   };
 
   return { app, server, io, rooms, game, close, setVoiceMuted };
+}
+
+/**
+ * Serves the built web app, if there is one (production). Client-side routes like /r/ABCD
+ * get index.html; unknown /api paths still 404.
+ */
+function serveWebApp(app: express.Express) {
+  const dist = config.paths.webDist;
+  const index = path.join(dist, 'index.html');
+  if (!fs.existsSync(index)) return;
+  app.use(express.static(dist, { index: false, maxAge: '1h' }));
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' || req.path.startsWith('/api/') || !req.accepts('html')) return next();
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(index);
+  });
 }

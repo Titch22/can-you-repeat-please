@@ -52,7 +52,8 @@ Each milestone should end with something you can play or demo.
 - [ ] Visual identity, animations, UI sound effects
 - [ ] Mic and output device picker, mobile layout, Safari (mp4) support
 - [ ] Rate limiting, input sanitizing, error toasts
-- [ ] Deploy (Fly.io or Render, plus LiveKit Cloud) and play with real friends
+- [x] Production setup: Dockerfile, compose stack (game + LiveKit) behind nginx, deployment guide
+- [ ] Deploy on the VPS and play with real friends
 
 ## Later ideas
 

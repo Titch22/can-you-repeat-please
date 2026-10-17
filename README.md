@@ -69,3 +69,4 @@ docs/              Design, architecture, protocol, roadmap
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, state machine, voice and mute strategy, audio lifecycle |
 | [PROTOCOL.md](docs/PROTOCOL.md)         | Socket.IO events and HTTP routes                                    |
 | [ROADMAP.md](docs/ROADMAP.md)           | Milestones and progress                                             |
+| [DEPLOYMENT.md](docs/DEPLOYMENT.md)     | Running it on a VPS (Docker Compose + nginx)                        |
