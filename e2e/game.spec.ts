@@ -57,7 +57,11 @@ test('three players play a 2-round game from lobby back to lobby', async ({ brow
         await expect(page.getByTestId('playback')).toContainText('of 3', { timeout: 45_000 });
       }),
     );
-    // Everyone hears the attempts, then votes for one of the others.
+    // Everyone hears the attempts, then votes for one of the others. Attempts show who made them.
+    await expect(phase(alice)).toHaveText('Vote', { timeout: 45_000 });
+    for (const name of ['Alice', 'Bob', 'Carol']) {
+      await expect(alice.getByTestId('vote-list')).toContainText(name);
+    }
     for (const page of pages) await voteForSomeoneElse(page);
     for (const page of pages) {
       await expect(phase(page)).toHaveText(round === 2 ? /Results|Final results/ : 'Results');

@@ -100,9 +100,16 @@ describe('GameRunner', () => {
     expect(room.game!.playback!.startsAt - Date.now()).toBe(T.playbackIntroMs);
     const items = room.game!.playback!.items;
     expect(items.map((i) => i.kind)).toEqual(['reference', 'clip', 'clip', 'clip']);
+    // Each attempt is shown with its author (players recognize each other's voices anyway).
+    expect(items.map((i) => i.playerId).sort()).toEqual(
+      [null, id('Alice'), id('Bob'), id('Carol')].sort(),
+    );
     expect(rooms.toState(room, id('Bob')).myClipId).toBe('clip-Bob');
 
     advanceTo(room, 'VOTING');
+    expect(rooms.toState(room, id('Bob')).clips.find((c) => c.id === 'clip-Alice')?.playerId).toBe(
+      id('Alice'),
+    );
     expect(errorCode(() => game.vote(room.code, id('Alice'), ['clip-Alice']))).toBe(
       'CANNOT_VOTE_SELF',
     );

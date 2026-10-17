@@ -22,11 +22,13 @@ export interface SoundRef {
   uploadedBy?: string;
 }
 
-/** One entry of the playback queue: the reference again, then each recording, anonymously. */
+/** One entry of the playback queue: the reference again, then each recording. */
 export interface PlaybackItem {
   kind: 'reference' | 'clip';
   /** Set for clips; what votes refer to. */
   clipId: string | null;
+  /** Author of the clip (null for the reference). */
+  playerId: string | null;
   url: string;
   durationMs: number;
 }
@@ -59,8 +61,8 @@ export interface RoomState {
   submittedPlayerIds: string[];
   /** Playback queue; item `index` starts at `startsAt`. */
   playback: { items: PlaybackItem[]; index: number; startsAt: number } | null;
-  /** Clips of this round, in playback order (anonymous until results). */
-  clips: { id: string; url: string; durationMs: number }[];
+  /** Clips of this round, in (shuffled) playback order, with their author. */
+  clips: { id: string; url: string; durationMs: number; playerId: string }[];
   /** The viewer's own clip this round, which they can't vote for. */
   myClipId: string | null;
   myVotes: string[];

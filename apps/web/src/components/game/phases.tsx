@@ -13,6 +13,16 @@ interface PhaseProps {
   me: Player | undefined;
 }
 
+/** The player who made a clip; they may have left the room since. */
+function authorOf(room: RoomState, playerId: string | null) {
+  return (
+    room.players.find((p) => p.id === playerId) ?? {
+      nickname: 'Someone who left',
+      color: '#64748b',
+    }
+  );
+}
+
 /** Plays `url` for everyone at `startsAt` (server time) while mounted. */
 function useScheduledSound(url: string | undefined, startsAt: number | undefined) {
   useEffect(() => {
@@ -133,7 +143,7 @@ export function PlaybackPhase({ room }: PhaseProps) {
       <div className="flex flex-col items-center gap-3 py-10 text-center" data-testid="playback">
         <p className="text-4xl font-black">Here come the attempts!</p>
         <p className="text-slate-400">
-          The original first, then {total} {total === 1 ? 'attempt' : 'attempts'}, anonymously.
+          The original first, then {total} {total === 1 ? 'attempt' : 'attempts'}.
         </p>
       </div>
     );
@@ -151,7 +161,10 @@ export function PlaybackPhase({ room }: PhaseProps) {
           <p className="text-slate-400">
             Attempt {attempt} of {total}
           </p>
-          <p className="text-4xl font-black">#{attempt}</p>
+          <p className="flex items-center gap-3 text-4xl font-black">
+            <Avatar player={authorOf(room, item.playerId)} size="size-11" />
+            {authorOf(room, item.playerId).nickname}
+          </p>
           {item.clipId === room.myClipId && <p className="text-sm text-amber-300">That’s you!</p>}
         </>
       )}
@@ -186,8 +199,9 @@ export function VotingPhase({ room, me }: PhaseProps) {
           : 'The players are voting…'}
       </p>
       <ul className="grid gap-2 sm:grid-cols-2" data-testid="vote-list">
-        {room.clips.map((clip, i) => {
+        {room.clips.map((clip) => {
           const mine = clip.id === room.myClipId;
+          const author = authorOf(room, clip.playerId);
           const isSelected = selected.includes(clip.id);
           return (
             <li
@@ -196,10 +210,14 @@ export function VotingPhase({ room, me }: PhaseProps) {
                 isSelected ? 'border-amber-400 bg-amber-400/10' : 'border-slate-800 bg-slate-800/60'
               }`}
             >
-              <PlayButton label={`Replay attempt ${i + 1}`} onClick={() => replay(clip.url)} />
-              <span className="flex-1 font-semibold">
-                Attempt #{i + 1}
-                {mine && <span className="ml-2 text-sm font-normal text-slate-400">(yours)</span>}
+              <PlayButton
+                label={`Replay ${author.nickname}’s attempt`}
+                onClick={() => replay(clip.url)}
+              />
+              <Avatar player={author} />
+              <span className="min-w-0 flex-1 truncate font-semibold">
+                {author.nickname}
+                {mine && <span className="ml-2 text-sm font-normal text-slate-400">(you)</span>}
               </span>
               {canVote && !mine && (
                 <Button
@@ -233,17 +251,16 @@ export function VotingPhase({ room, me }: PhaseProps) {
 
 export function RoundResultsPhase({ room }: PhaseProps) {
   const results = room.roundResults ?? [];
-  const playerOf = (id: string) => room.players.find((p) => p.id === id);
   const best = Math.max(0, ...results.map((r) => r.votes));
   if (results.length === 0) {
     return <p className="py-10 text-center text-slate-400">Nobody recorded anything this round!</p>;
   }
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-center text-slate-400">And the attempts were by…</p>
+      <p className="text-center text-slate-400">Votes this round</p>
       <ul className="flex flex-col gap-2" data-testid="round-results">
         {results.map((r) => {
-          const p = playerOf(r.playerId);
+          const author = authorOf(room, r.playerId);
           return (
             <li
               key={r.clipId}
@@ -251,11 +268,12 @@ export function RoundResultsPhase({ room }: PhaseProps) {
                 best > 0 && r.votes === best ? 'bg-amber-400/15' : 'bg-slate-800/60'
               }`}
             >
-              <PlayButton label="Replay" onClick={() => replay(r.url)} />
-              {p ? <Avatar player={p} /> : <Avatar player={{ nickname: '?', color: '#64748b' }} />}
-              <span className="flex-1 truncate font-semibold">
-                {p?.nickname ?? 'Someone who left'}
-              </span>
+              <PlayButton
+                label={`Replay ${author.nickname}’s attempt`}
+                onClick={() => replay(r.url)}
+              />
+              <Avatar player={author} />
+              <span className="flex-1 truncate font-semibold">{author.nickname}</span>
               <span className="font-bold tabular-nums">
                 +{r.votes} {r.votes === 1 ? 'vote' : 'votes'}
               </span>

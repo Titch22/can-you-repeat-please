@@ -240,7 +240,12 @@ export class RoomManager {
       playback: g?.playback ?? null,
       clips:
         g && showClips
-          ? g.clipOrder.map((id) => ({ id, url: clipUrl(room.code, id), durationMs: clipMs }))
+          ? g.clipOrder.map((id) => ({
+              id,
+              url: clipUrl(room.code, id),
+              durationMs: clipMs,
+              playerId: [...g.recordings.values()].find((r) => r.clipId === id)!.playerId,
+            }))
           : [],
       myClipId: g?.recordings.get(viewerId)?.clipId ?? null,
       myVotes: g?.votes.get(viewerId) ?? [],

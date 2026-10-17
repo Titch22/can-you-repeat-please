@@ -35,7 +35,7 @@ Each milestone should end with something you can play or demo.
 - [x] GameRunner timers, deadlines, `time:sync`
 - [x] Reference phase: preload, then synced play at `startsAt`
 - [x] Recording phase: server-enforced mute, `useRecorder` hook, level meter, upload
-- [x] Playback phase: shuffled anonymous clips, synced by the playback `index`
+- [x] Playback phase: shuffled clips shown with their author, synced by the playback `index`
 - [x] Voting phase: up to 2 votes, no self-vote, ends early when everyone has voted
 - [x] Round results, final podium, back to lobby; recordings deleted
 - [x] Playwright e2e test: 3 fake-mic players, 2 rounds

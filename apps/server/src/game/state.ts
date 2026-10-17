@@ -2,7 +2,7 @@ import type { PlaybackItem, RoundResult, SoundRef } from '@cyrp/shared';
 
 export interface Recording {
   playerId: string;
-  /** Also the stored file id: random, so it reveals nothing about the author. */
+  /** Also the stored file id (random). */
   clipId: string;
   url: string;
 }

@@ -43,6 +43,7 @@ interface SoundRef {
 interface PlaybackItem {
   kind: 'reference' | 'clip';
   clipId: string | null; // set for clips; what votes refer to
+  playerId: string | null; // author of the clip (null for the reference)
   url: string;
   durationMs: number;
 }
@@ -60,7 +61,7 @@ interface RoomState {
   recording: { startsAt: number; endsAt: number } | null; // window after the 3-2-1
   submittedPlayerIds: string[]; // whose recording arrived this round
   playback: { items: PlaybackItem[]; index: number; startsAt: number } | null;
-  clips: { id: string; url: string; durationMs: number }[]; // playback order, anonymous
+  clips: { id: string; url: string; durationMs: number; playerId: string }[]; // playback order
   myClipId: string | null; // per viewer
   myVotes: string[]; // per viewer
   votedPlayerIds: string[]; // who has voted (not what they voted for)

@@ -207,12 +207,14 @@ export class GameRunner {
       this.rng,
     );
     const clipMs = g.recording!.endsAt - g.recording!.startsAt;
+    const owner = new Map([...g.recordings.values()].map((r) => [r.clipId, r.playerId]));
     const ref = g.reference!;
     const items: PlaybackItem[] = [
-      { kind: 'reference', clipId: null, url: ref.url, durationMs: ref.durationMs },
+      { kind: 'reference', clipId: null, playerId: null, url: ref.url, durationMs: ref.durationMs },
       ...g.clipOrder.map((id) => ({
         kind: 'clip' as const,
         clipId: id,
+        playerId: owner.get(id)!,
         url: clipUrl(room.code, id),
         durationMs: clipMs,
       })),
