@@ -2,9 +2,7 @@ import { io, type Socket } from 'socket.io-client';
 import type { ClientToServerEvents, ServerToClientEvents } from '@cyrp/shared';
 
 /** Single shared connection. In dev, Vite proxies /socket.io to the game server. */
-export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io({
-  autoConnect: true,
-});
+export const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io();
 
 /**
  * Estimates serverTime - clientTime by pinging a few times and keeping the median,

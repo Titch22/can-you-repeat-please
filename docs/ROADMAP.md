@@ -13,12 +13,12 @@ Each milestone should end with something you can play or demo.
 
 ## M1: Rooms and lobby (no voice)
 
-- [ ] Home page: nickname and color picker, create room, join by code
-- [ ] `/r/:code` deep link
-- [ ] RoomManager: codes, 8-player cap, host, host migration, kick
-- [ ] Session token, `room:resume`, 30s reconnect grace
-- [ ] Lobby UI: player list, settings panel (editable by the host only)
-- [ ] Room closes and its temp dir is deleted when empty or idle
+- [x] Home page: nickname and color picker, create room, join by code
+- [x] `/r/:code` deep link
+- [x] RoomManager: codes, 8-player cap, host, host migration, kick
+- [x] Session token, `room:resume`, 30s reconnect grace
+- [x] Lobby UI: player list, settings panel (editable by the host only)
+- [x] Room closes and its temp dir is deleted when empty or idle
 
 ## M2: Voice lobby
 

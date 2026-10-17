@@ -65,7 +65,7 @@ After the last round comes **Final results**: a podium and per-round highlights 
 | Situation                      | Behavior                                                                                                                                                                |
 | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A player leaves during a round | Their recording, if uploaded, is still played and can receive votes. Their votes still count. They drop off the scoreboard if they don't come back before the game ends |
-| A player disconnects           | They have 30s to reconnect into the same seat. Their `sessionId` is kept in localStorage                                                                                |
+| A player disconnects           | They have 30s to reconnect into the same seat. Their session token is kept in sessionStorage (per tab, survives a reload)                                               |
 | A recording fails to upload    | That player is shown as "no recording" for the round                                                                                                                    |
 | Nobody recorded                | Playback and voting are skipped; the game goes straight to round results                                                                                                |
 | Fewer than 2 players remain    | The game ends early and shows final results                                                                                                                             |

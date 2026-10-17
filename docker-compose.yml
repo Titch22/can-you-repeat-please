@@ -2,7 +2,9 @@
 services:
   livekit:
     image: livekit/livekit-server:latest
-    command: --dev --bind 0.0.0.0
+    # --node-ip: advertise localhost to browsers instead of the container's internal IP,
+    # which isn't reachable from the host on Docker Desktop (Windows/macOS).
+    command: --dev --bind 0.0.0.0 --node-ip 127.0.0.1
     ports:
       - '7880:7880' # HTTP / WebSocket signaling
       - '7881:7881' # WebRTC over TCP

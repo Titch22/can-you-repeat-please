@@ -50,6 +50,8 @@ export interface RoomState {
 
 export type ErrorCode =
   | 'ROOM_NOT_FOUND'
+  | 'SESSION_EXPIRED'
+  | 'INTERNAL'
   | 'ROOM_FULL'
   | 'NOT_HOST'
   | 'WRONG_PHASE'
@@ -62,4 +64,4 @@ export type ErrorCode =
   | 'CANNOT_VOTE_SELF'
   | 'TOO_MANY_VOTES';
 
-export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode | string };
+export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode };
