@@ -1,0 +1,73 @@
+# Game Design
+
+## Concept
+
+"Can You Repeat Please?" is a "friendslop" party game: short, chaotic, meant to be played with friends on a voice call. The fun comes from hearing your friends try to imitate a goat, a dial-up modem or a car alarm.
+
+## Players and rooms
+
+- Rooms hold **2 to 8 players**.
+- There are no accounts. Players pick a **nickname** and an **avatar color**.
+- Players join with a **4-letter room code** or a shareable link: `/r/ABCD`.
+- The room creator is the **host**. Only the host can:
+  - change the settings,
+  - start the game,
+  - kick a player.
+- If the host leaves, the player who joined earliest becomes host.
+- Players can join a room while a game is running. They become **spectators** until the next game starts.
+
+## Lobby
+
+- The lobby is an **open voice channel**: everyone hears and talks to everyone by default.
+- Each player can:
+  - mute their own mic,
+  - change each other player's volume,
+  - see who is speaking.
+- The host sets the game settings. Everyone sees the current values.
+
+### Settings
+
+| Setting              | Values                                                     | Default   |
+| -------------------- | ---------------------------------------------------------- | --------- |
+| Rounds               | 1–20                                                       | 5         |
+| Sound source         | `default` (server pack), `custom` (lobby uploads), `mixed` | `default` |
+| Extra recording time | 0–3s added to the sound's length                           | 1s        |
+| Voting time          | 10–60s                                                     | 20s       |
+
+### Custom sounds
+
+- Any player can upload sounds in the lobby. Limits: **10 seconds or less**, **2 MB or less**, at most **5 per player**. Accepted formats: mp3, ogg, wav, webm, m4a.
+- Custom sounds belong to the lobby. They are **never stored long-term** and are **deleted when the lobby ends**, that is, when the last player leaves or the room times out.
+- The sound source `custom` needs at least as many uploaded sounds as there are rounds. If there are too few, the host can't start the game until they lower the round count or switch to `mixed`.
+- A sound isn't picked twice in the same game.
+
+## Round flow
+
+| #   | Phase             | Length                              | Voice chat         | What happens                                                                                                                           |
+| --- | ----------------- | ----------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Round intro**   | 3s                                  | on                 | "Round 2/5" title card                                                                                                                 |
+| 2   | **Reference**     | sound length + 1s                   | on, volume lowered | The reference sound plays for everyone at the same time                                                                                |
+| 3   | **Recording**     | sound length + extra time (max 10s) | **muted**          | A 3-2-1 countdown, then everyone records at the same time. A level meter shows the mic is picking up sound                             |
+| 4   | **Playback**      | about (clip length + 1s) × players  | on, volume lowered | The reference plays once more, then each recording plays in turn, in shuffled order and **anonymously**                                |
+| 5   | **Voting**        | voting time                         | on                 | Each player upvotes **up to 2** recordings, not their own. Clips can be replayed locally. The phase ends early once everyone has voted |
+| 6   | **Round results** | 6s                                  | on                 | Names are revealed, with votes received this round and total scores                                                                    |
+
+After the last round comes **Final results**: a podium and per-round highlights (the most-voted clip of each round). The host can then send everyone back to the lobby. Settings and custom sounds are kept.
+
+## Scoring
+
+- Each upvote received is worth **1 point**.
+- Players who didn't record get 0 for the round. They can still vote.
+- Ties are shared: equal scores get the same podium place.
+
+## Edge cases
+
+| Situation                      | Behavior                                                                                                                                                                |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A player leaves during a round | Their recording, if uploaded, is still played and can receive votes. Their votes still count. They drop off the scoreboard if they don't come back before the game ends |
+| A player disconnects           | They have 30s to reconnect into the same seat. Their `sessionId` is kept in localStorage                                                                                |
+| A recording fails to upload    | That player is shown as "no recording" for the round                                                                                                                    |
+| Nobody recorded                | Playback and voting are skipped; the game goes straight to round results                                                                                                |
+| Fewer than 2 players remain    | The game ends early and shows final results                                                                                                                             |
+| A player denies mic permission | They can still join, hear, vote and spectate, but they can't record or talk                                                                                             |
+| The host leaves mid-game       | The game continues; host rights move to the next player                                                                                                                 |

@@ -1,0 +1,27 @@
+{
+  "name": "@cyrp/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=.env src/index.ts",
+    "build": "tsup",
+    "start": "node --env-file-if-exists=.env dist/index.js",
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@cyrp/shared": "workspace:^",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "livekit-server-sdk": "^2.19.1",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "socket.io-client": "^4.8.4",
+    "tsup": "^9.0.0",
+    "tsx": "^4.23.15"
+  }
+}

@@ -1,0 +1,109 @@
+# Protocol
+
+The source of truth is the set of zod schemas in `packages/shared/src/schemas.ts`. This document describes them; if the two ever disagree, the code wins.
+
+## Core types
+
+```ts
+type Phase =
+  | 'LOBBY'
+  | 'ROUND_INTRO'
+  | 'REFERENCE'
+  | 'RECORDING'
+  | 'PLAYBACK'
+  | 'VOTING'
+  | 'ROUND_RESULTS'
+  | 'FINAL_RESULTS';
+
+interface Player {
+  id: string; // public id, used as the LiveKit identity
+  nickname: string; // 1–20 chars
+  color: string; // hex
+  isHost: boolean;
+  connected: boolean;
+  isSpectator: boolean; // joined mid-game
+  score: number;
+}
+
+interface Settings {
+  rounds: number; // 1–20
+  soundSource: 'default' | 'custom' | 'mixed';
+  extraRecordMs: number; // 0–3000
+  votingMs: number; // 10000–60000
+}
+
+interface SoundRef {
+  id: string;
+  label: string;
+  durationMs: number;
+  url: string;
+  uploadedBy?: string;
+}
+
+interface Clip {
+  id: string;
+  url: string;
+} // anonymous during PLAYBACK/VOTING
+
+interface RoomState {
+  code: string;
+  players: Player[];
+  settings: Settings;
+  customSounds: SoundRef[];
+  phase: Phase;
+  deadline: number | null; // server epoch ms
+  round: number; // 1-based, 0 in the lobby
+  reference: (SoundRef & { startsAt: number }) | null;
+  playback: { clips: Clip[]; index: number; startsAt: number } | null;
+  myVotes: string[]; // clip ids (sent to each player separately)
+  votedPlayerIds: string[]; // who has voted (not what they voted for)
+  roundResults: { clipId: string; playerId: string; votes: number }[] | null;
+}
+```
+
+## Socket.IO events
+
+### Client → server
+
+Every event takes an ack callback that receives `{ ok: true, ... } | { ok: false, error: string }`.
+
+| Event                 | Payload                                     | Ack                                | Who                                                    |
+| --------------------- | ------------------------------------------- | ---------------------------------- | ------------------------------------------------------ |
+| `room:create`         | `{ nickname, color }`                       | `{ code, playerId, sessionToken }` | anyone                                                 |
+| `room:join`           | `{ code, nickname, color }`                 | `{ playerId, sessionToken }`       | anyone                                                 |
+| `room:resume`         | `{ code, sessionToken }`                    | `{ playerId }`                     | a player reconnecting                                  |
+| `room:leave`          | `{}`                                        |                                    | player                                                 |
+| `room:updateSettings` | `Partial<Settings>`                         |                                    | host, lobby only                                       |
+| `room:kick`           | `{ playerId }`                              |                                    | host                                                   |
+| `room:deleteSound`    | `{ soundId }`                               |                                    | the uploader or the host, lobby only                   |
+| `game:start`          | `{}`                                        |                                    | host, lobby only                                       |
+| `game:vote`           | `{ clipIds: string[] }` (0–2, not your own) |                                    | player, VOTING only; can be re-sent to change the vote |
+| `game:backToLobby`    | `{}`                                        |                                    | host, FINAL_RESULTS only                               |
+| `time:sync`           | `{ clientTime }`                            | `{ clientTime, serverTime }`       | anyone                                                 |
+
+### Server → client
+
+| Event         | Payload              | When                                                                                |
+| ------------- | -------------------- | ----------------------------------------------------------------------------------- |
+| `room:state`  | `RoomState`          | After any change; full snapshot                                                     |
+| `room:kicked` | `{ reason }`         | The player was kicked                                                               |
+| `room:closed` | `{}`                 | The room was closed                                                                 |
+| `voice:mute`  | `{ muted: boolean }` | Sent at the same time as the RECORDING start and end, so clients can mute instantly |
+| `error`       | `{ message }`        | Unexpected errors                                                                   |
+
+## HTTP routes
+
+Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessionToken>`. Routes used as `<audio src>` also accept `?t=<sessionToken>`.
+
+| Method | Route                                      | Body                      | Response         | Notes                                                                    |
+| ------ | ------------------------------------------ | ------------------------- | ---------------- | ------------------------------------------------------------------------ |
+| `GET`  | `/api/health`                              |                           | `{ ok: true }`   |                                                                          |
+| `POST` | `/api/rooms/:code/voice-token`             |                           | `{ url, token }` | LiveKit URL and JWT                                                      |
+| `POST` | `/api/rooms/:code/sounds`                  | multipart `file`, `label` | `SoundRef`       | Lobby only; ≤2 MB, ≤10s, ≤5 per player                                   |
+| `POST` | `/api/rooms/:code/rounds/:round/recording` | multipart `file`          | `{ ok: true }`   | During RECORDING plus a 5s grace period; ≤2 MB; one per player per round |
+| `GET`  | `/api/rooms/:code/audio/:fileId`           |                           | audio bytes      | Recordings and custom sounds                                             |
+| `GET`  | `/sounds/default/:file`                    |                           | audio bytes      | Static default pack, public                                              |
+
+### Error codes
+
+`ROOM_NOT_FOUND`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`.
