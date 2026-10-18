@@ -49,11 +49,13 @@ Each milestone should end with something you can play or demo.
 
 ## M5: Polish and deploy
 
-- [ ] Visual identity, animations, UI sound effects
-- [ ] Mic and output device picker, mobile layout, Safari (mp4) support
+- [x] Visual identity: logo and favicon, Outfit + Inter fonts (self-hosted), design tokens, shared UI components, animations (respecting reduced motion)
+- [x] Mic picker and mic level indicator, mobile layout
+- ~~UI sound effects~~ (dropped by choice)
+- ~~Output device picker, Safari (mp4) support~~ (dropped)
 - [ ] Rate limiting, input sanitizing, error toasts
 - [x] Production setup: Dockerfile, compose stack (game + LiveKit) behind nginx, deployment guide
-- [ ] Deploy on the VPS and play with real friends
+- [x] Deploy on the VPS and play with real friends: https://game.cyrp.iamthesen.at/
 
 ## Later ideas
 

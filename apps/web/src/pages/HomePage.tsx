@@ -1,11 +1,19 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 import { RoomCodeSchema } from '@cyrp/shared';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { Logo } from '../components/Logo';
 import { ProfileFields, useProfile } from '../components/ProfileFields';
-import { Button, Card, ErrorText, Page } from '../components/ui';
+import { Button, Card, ErrorText, Notice, Page, inputClass } from '../components/ui';
 import { createRoom, joinRoom } from '../lib/actions';
 import { errorMessage } from '../lib/errors';
 import { useGame } from '../store';
+
+const STEPS = [
+  { title: 'Listen', text: 'A sound plays for everyone, at the same time.' },
+  { title: 'Repeat', text: 'Imitate it into your mic. Everyone records at once.' },
+  { title: 'Vote', text: 'Replay every attempt and vote for the best (or worst).' },
+];
 
 export function HomePage() {
   const navigate = useNavigate();
@@ -15,6 +23,7 @@ export function HomePage() {
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useDocumentTitle(null);
 
   const codeOk = RoomCodeSchema.safeParse(code).success;
 
@@ -40,50 +49,60 @@ export function HomePage() {
 
   return (
     <Page>
-      <header className="py-6 text-center">
-        <h1 className="text-4xl font-black tracking-tight sm:text-6xl">Can You Repeat Please?</h1>
-        <p className="mt-3 text-slate-400">
+      <header className="animate-enter pt-8 pb-2 sm:pt-12">
+        <Logo size="lg" />
+        <p className="mt-4 text-center text-muted sm:text-lg">
           Hear a sound. Imitate it. Vote for the best (or worst) attempt.
         </p>
       </header>
 
       {notice && (
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-rose-500/10 px-4 py-3 text-rose-200">
+        <Notice tone="danger">
           <span>{notice}</span>
-          <button className="text-sm underline" onClick={() => useGame.setState({ notice: null })}>
+          <button
+            className="text-sm font-semibold underline underline-offset-2"
+            onClick={() => useGame.setState({ notice: null })}
+          >
             Dismiss
           </button>
-        </div>
+        </Notice>
       )}
 
       {currentRoom && (
-        <div className="rounded-xl bg-slate-800 px-4 py-3">
-          You’re in room <b className="font-mono">{currentRoom.code}</b>.{' '}
-          <Link to={`/r/${currentRoom.code}`} className="text-amber-300 underline">
+        <Notice>
+          <span>
+            You’re in room <b className="font-mono tracking-widest">{currentRoom.code}</b>.
+          </span>
+          <Link
+            to={`/r/${currentRoom.code}`}
+            className="font-semibold text-accent underline underline-offset-2"
+          >
             Go back to it
           </Link>
-        </div>
+        </Notice>
       )}
 
-      <Card>
+      <Card title="Who are you?">
         <ProfileFields value={raw} onChange={update} />
       </Card>
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <Card className="flex flex-col justify-between gap-4">
+        <Card className="flex flex-col justify-between gap-5">
           <div>
-            <h2 className="font-bold">Create a room</h2>
-            <p className="text-sm text-slate-400">You’ll be the host and pick the settings.</p>
+            <h2 className="font-display text-lg font-bold">Create a room</h2>
+            <p className="mt-1 text-sm text-muted">
+              You’ll be the host: invite friends and pick the sounds.
+            </p>
           </div>
-          <Button onClick={onCreate} disabled={!valid || busy}>
+          <Button onClick={onCreate} disabled={!valid || busy} size="lg">
             Create room
           </Button>
         </Card>
 
         <Card>
-          <form onSubmit={onJoin} className="flex h-full flex-col justify-between gap-4">
-            <label className="flex flex-col gap-1.5">
-              <span className="font-bold">Join a room</span>
+          <form onSubmit={onJoin} className="flex h-full flex-col justify-between gap-5">
+            <label className="flex flex-col gap-2">
+              <span className="font-display text-lg font-bold">Join a room</span>
               <input
                 value={code}
                 onChange={(e) => setCode(e.target.value.toUpperCase())}
@@ -91,18 +110,40 @@ export function HomePage() {
                 placeholder="ABCD"
                 aria-label="Room code"
                 autoComplete="off"
-                className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-center font-mono text-2xl tracking-[0.3em] uppercase outline-none focus:border-amber-400"
+                className={`${inputClass} text-center font-mono text-2xl tracking-[0.35em] uppercase`}
               />
             </label>
-            <Button type="submit" variant="secondary" disabled={!valid || !codeOk || busy}>
+            <Button
+              type="submit"
+              variant="secondary"
+              size="lg"
+              disabled={!valid || !codeOk || busy}
+            >
               Join
             </Button>
           </form>
         </Card>
       </div>
 
-      {!valid && <p className="text-center text-sm text-slate-400">Pick a nickname to play.</p>}
+      {!valid && <p className="text-center text-sm text-muted">Pick a nickname to play.</p>}
       <ErrorText>{error}</ErrorText>
+
+      <section aria-label="How to play" className="mt-2 grid gap-3 sm:grid-cols-3">
+        {STEPS.map((step, i) => (
+          <div
+            key={step.title}
+            className="flex gap-3 rounded-card border border-line/60 bg-surface/50 p-4"
+          >
+            <span className="grid size-8 shrink-0 place-items-center rounded-full bg-accent/15 font-display font-bold text-accent">
+              {i + 1}
+            </span>
+            <span>
+              <span className="block font-display font-bold">{step.title}</span>
+              <span className="text-sm text-muted">{step.text}</span>
+            </span>
+          </div>
+        ))}
+      </section>
     </Page>
   );
 }

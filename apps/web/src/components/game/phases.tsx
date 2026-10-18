@@ -1,12 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { MAX_VOTES_PER_PLAYER, type Player, type RoomState } from '@cyrp/shared';
 import { useRecorder, type RecorderStatus } from '../../hooks/useRecorder';
 import { backToLobby, castVote } from '../../lib/actions';
 import { downloadUrl, playAt, replay } from '../../lib/audio';
 import { useServerNow } from '../../lib/clock';
 import { errorMessage } from '../../lib/errors';
-import { Button, ErrorText } from '../ui';
-import { Avatar, DownloadButton, PlayButton, ProgressBar } from './bits';
+import { Avatar, Button, ErrorText } from '../ui';
+import { DownloadButton, PlayButton, ProgressBar } from './bits';
 
 interface PhaseProps {
   room: RoomState;
@@ -36,15 +36,35 @@ function useScheduledSound(url: string | undefined, startsAt: number | undefined
   }, [url, startsAt]);
 }
 
+/** Centered stage content. */
+function Stage({ children, testId }: { children: ReactNode; testId?: string }) {
+  return (
+    <div
+      className="flex flex-col items-center gap-4 py-8 text-center sm:py-10"
+      data-testid={testId}
+    >
+      {children}
+    </div>
+  );
+}
+
+const Lead = ({ children, className = '' }: { children: ReactNode; className?: string }) => (
+  <p className={`text-muted sm:text-lg ${className}`}>{children}</p>
+);
+
+const Headline = ({ children }: { children: ReactNode }) => (
+  <p className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">{children}</p>
+);
+
 export function RoundIntro({ room }: PhaseProps) {
   return (
-    <div className="flex flex-col items-center gap-2 py-10 text-center">
-      <p className="text-slate-400">Get ready…</p>
-      <p className="text-5xl font-black">
+    <Stage>
+      <Lead>Get ready…</Lead>
+      <p className="animate-pop font-display text-6xl font-black tracking-tight sm:text-7xl">
         Round {room.round}
-        <span className="text-slate-500">/{room.settings.rounds}</span>
+        <span className="text-subtle">/{room.settings.rounds}</span>
       </p>
-    </div>
+    </Stage>
   );
 }
 
@@ -56,15 +76,15 @@ export function ReferencePhase({ room }: PhaseProps) {
   const playing = now >= ref.startsAt;
   const ended = now >= ref.startsAt + ref.durationMs;
   return (
-    <div className="flex flex-col items-center gap-4 py-8 text-center">
-      <p className={ended ? 'font-bold text-amber-300' : 'text-slate-400'}>
+    <Stage>
+      <Lead className={ended ? 'font-semibold text-accent' : ''}>
         {ended ? 'Get ready to repeat it!' : playing ? 'Listen carefully!' : 'Here it comes…'}
-      </p>
-      <p className="text-4xl font-black">{ref.label}</p>
+      </Lead>
+      <Headline>{ref.label}</Headline>
       <div className="w-full max-w-sm">
         <ProgressBar from={ref.startsAt} to={ref.startsAt + ref.durationMs} />
       </div>
-    </div>
+    </Stage>
   );
 }
 
@@ -88,48 +108,66 @@ export function RecordingPhase({ room, me }: PhaseProps) {
 
   if (!canRecord) {
     return (
-      <p className="py-10 text-center text-slate-400">
-        The players are recording… You’ll join in the next game.
-      </p>
+      <Stage>
+        <Lead>The players are recording… You’ll join in the next game.</Lead>
+      </Stage>
     );
   }
 
   const countdown = Math.ceil((rec.startsAt - now) / 1000);
+  const timesUp = now >= rec.endsAt;
   return (
-    <div className="flex flex-col items-center gap-5 py-8 text-center" data-testid="recorder">
-      <p className="text-slate-400">Everyone is muted while recording.</p>
-      {now >= rec.endsAt && <p className="text-5xl font-black">Time’s up!</p>}
+    <Stage testId="recorder">
+      <Lead className="text-sm sm:text-base">Everyone is muted while recording.</Lead>
+      {timesUp && (
+        <p className="animate-shake font-display text-5xl font-black text-accent">Time’s up!</p>
+      )}
       {status === 'countdown' && countdown > 0 ? (
-        <p className="text-7xl font-black tabular-nums">{countdown}</p>
-      ) : (
         <p
-          className={`text-3xl font-black ${status === 'recording' ? 'text-rose-400' : ''}`}
+          key={countdown}
+          className="animate-pop font-display text-8xl font-black text-accent tabular-nums"
+        >
+          {countdown}
+        </p>
+      ) : status === 'recording' ? (
+        <p
+          className="inline-flex items-center gap-3 rounded-full bg-rec/15 px-5 py-2 font-display text-2xl font-extrabold text-rose-300 sm:text-3xl"
           data-status={status}
         >
-          {status === 'recording' && (
-            <span className="mr-3 inline-block size-4 animate-pulse rounded-full bg-rose-500" />
-          )}
+          <span className="size-4 animate-pulse rounded-full bg-rec shadow-[0_0_12px_var(--color-rec)]" />
+          {RECORDER_TEXT[status]}
+        </p>
+      ) : (
+        <p
+          className={`font-display text-2xl font-bold sm:text-3xl ${
+            status === 'done' ? 'text-success' : status === 'error' ? 'text-danger' : ''
+          }`}
+          data-status={status}
+        >
           {RECORDER_TEXT[status]}
         </p>
       )}
       {status === 'recording' && (
         <div className="flex w-full max-w-sm flex-col gap-2">
-          <ProgressBar from={rec.startsAt} to={rec.endsAt} color="bg-rose-500" />
-          <div className="h-3 overflow-hidden rounded-full bg-slate-800" aria-label="Mic level">
+          <ProgressBar from={rec.startsAt} to={rec.endsAt} color="bg-rec" />
+          <div
+            className="h-3 overflow-hidden rounded-full bg-surface-raised"
+            aria-label="Mic level"
+          >
             <div
-              className="h-full bg-emerald-400 transition-[width] duration-75"
+              className="h-full rounded-full bg-success transition-[width] duration-75"
               style={{ width: `${level * 100}%` }}
             />
           </div>
         </div>
       )}
       {status !== 'recording' && status !== 'countdown' && (
-        <p className="text-sm text-slate-400">
+        <p className="text-sm text-muted">
           {room.submittedPlayerIds.length} recording
           {room.submittedPlayerIds.length === 1 ? '' : 's'} received
         </p>
       )}
-    </div>
+    </Stage>
   );
 }
 
@@ -145,38 +183,41 @@ export function PlaybackPhase({ room }: PhaseProps) {
   // Pause before the first sound.
   if (pb.index === 0 && now < pb.startsAt) {
     return (
-      <div className="flex flex-col items-center gap-3 py-10 text-center" data-testid="playback">
-        <p className="text-4xl font-black">Here come the attempts!</p>
-        <p className="text-slate-400">
+      <Stage testId="playback">
+        <Headline>Here come the attempts!</Headline>
+        <Lead>
           The original first, then {total} {total === 1 ? 'attempt' : 'attempts'}.
-        </p>
-      </div>
+        </Lead>
+      </Stage>
     );
   }
 
+  const author = authorOf(room, item.playerId);
   return (
-    <div className="flex flex-col items-center gap-4 py-8 text-center" data-testid="playback">
+    <Stage testId="playback">
       {item.kind === 'reference' ? (
-        <>
-          <p className="text-slate-400">The original, one more time</p>
-          <p className="text-4xl font-black">{room.reference?.label}</p>
-        </>
+        <div key="reference" className="flex animate-enter flex-col items-center gap-3">
+          <Lead>The original, one more time</Lead>
+          <Headline>{room.reference?.label}</Headline>
+        </div>
       ) : (
-        <>
-          <p className="text-slate-400">
+        <div key={item.clipId} className="flex animate-enter flex-col items-center gap-3">
+          <Lead>
             Attempt {attempt} of {total}
+          </Lead>
+          <p className="flex items-center gap-3 font-display text-4xl font-extrabold sm:text-5xl">
+            <Avatar player={author} size="lg" />
+            {author.nickname}
           </p>
-          <p className="flex items-center gap-3 text-4xl font-black">
-            <Avatar player={authorOf(room, item.playerId)} size="size-11" />
-            {authorOf(room, item.playerId).nickname}
-          </p>
-          {item.clipId === room.myClipId && <p className="text-sm text-amber-300">That’s you!</p>}
-        </>
+          {item.clipId === room.myClipId && (
+            <p className="text-sm font-semibold text-accent">That’s you!</p>
+          )}
+        </div>
       )}
       <div className="w-full max-w-sm">
         <ProgressBar from={pb.startsAt} to={pb.startsAt + item.durationMs} />
       </div>
-    </div>
+    </Stage>
   );
 }
 
@@ -197,22 +238,25 @@ export function VotingPhase({ room, me }: PhaseProps) {
   };
 
   return (
-    <div className="flex flex-col gap-4">
-      <p className="text-center text-slate-400">
+    <div className="flex flex-col gap-4 pt-4">
+      <Lead className="text-center">
         {canVote
           ? `Pick your favorite attempts (up to ${MAX_VOTES_PER_PLAYER}).`
           : 'The players are voting…'}
-      </p>
+      </Lead>
       <ul className="grid gap-2 sm:grid-cols-2" data-testid="vote-list">
-        {room.clips.map((clip) => {
+        {room.clips.map((clip, i) => {
           const mine = clip.id === room.myClipId;
           const author = authorOf(room, clip.playerId);
           const isSelected = selected.includes(clip.id);
           return (
             <li
               key={clip.id}
-              className={`flex items-center gap-3 rounded-xl border px-3 py-2 transition ${
-                isSelected ? 'border-amber-400 bg-amber-400/10' : 'border-slate-800 bg-slate-800/60'
+              style={{ animationDelay: `${i * 40}ms` } as CSSProperties}
+              className={`flex animate-enter items-center gap-2.5 rounded-control border px-3 py-2.5 transition ${
+                isSelected
+                  ? 'border-accent bg-accent/10 shadow-accent'
+                  : 'border-line bg-surface-raised/50'
               }`}
             >
               <PlayButton
@@ -222,7 +266,7 @@ export function VotingPhase({ room, me }: PhaseProps) {
               <Avatar player={author} />
               <span className="min-w-0 flex-1 truncate font-semibold">
                 {author.nickname}
-                {mine && <span className="ml-2 text-sm font-normal text-slate-400">(you)</span>}
+                {mine && <span className="ml-2 text-sm font-normal text-muted">(you)</span>}
               </span>
               <DownloadButton
                 href={downloadUrl(clip.url, recordingName(room, author))}
@@ -230,8 +274,10 @@ export function VotingPhase({ room, me }: PhaseProps) {
               />
               {canVote && !mine && (
                 <Button
+                  key={isSelected ? 'on' : 'off'}
                   variant={isSelected ? 'primary' : 'secondary'}
-                  className="px-3 py-1.5 text-sm"
+                  size="sm"
+                  className={isSelected ? 'animate-bump' : ''}
                   onClick={() => toggle(clip.id)}
                   aria-pressed={isSelected}
                 >
@@ -244,14 +290,16 @@ export function VotingPhase({ room, me }: PhaseProps) {
       </ul>
       {canVote && (
         <div className="flex flex-col items-center gap-2">
-          <Button onClick={() => void submit()} className="w-full max-w-xs">
+          <Button size="lg" onClick={() => void submit()} className="w-full max-w-xs">
             {sent ? 'Update my votes' : selected.length ? 'Send my votes' : 'Skip voting'}
           </Button>
-          {sent && <p className="text-sm text-emerald-300">Votes sent. Waiting for the others…</p>}
+          {sent && (
+            <p className="text-sm font-medium text-success">Votes sent. Waiting for the others…</p>
+          )}
           <ErrorText>{error}</ErrorText>
         </div>
       )}
-      <p className="text-center text-sm text-slate-400">
+      <p className="text-center text-sm text-muted">
         {room.votedPlayerIds.length} / {room.players.filter((p) => !p.isSpectator).length} voted
       </p>
     </div>
@@ -262,19 +310,25 @@ export function RoundResultsPhase({ room }: PhaseProps) {
   const results = room.roundResults ?? [];
   const best = Math.max(0, ...results.map((r) => r.votes));
   if (results.length === 0) {
-    return <p className="py-10 text-center text-slate-400">Nobody recorded anything this round!</p>;
+    return (
+      <Stage>
+        <Lead>Nobody recorded anything this round!</Lead>
+      </Stage>
+    );
   }
   return (
-    <div className="flex flex-col gap-3">
-      <p className="text-center text-slate-400">Votes this round</p>
+    <div className="flex flex-col gap-3 pt-4">
+      <Lead className="text-center">Votes this round</Lead>
       <ul className="flex flex-col gap-2" data-testid="round-results">
-        {results.map((r) => {
+        {results.map((r, i) => {
           const author = authorOf(room, r.playerId);
+          const top = best > 0 && r.votes === best;
           return (
             <li
               key={r.clipId}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2 ${
-                best > 0 && r.votes === best ? 'bg-amber-400/15' : 'bg-slate-800/60'
+              style={{ animationDelay: `${i * 60}ms` } as CSSProperties}
+              className={`flex animate-enter items-center gap-2.5 rounded-control border px-3 py-2.5 ${
+                top ? 'border-accent/60 bg-accent/10' : 'border-line bg-surface-raised/50'
               }`}
             >
               <PlayButton
@@ -282,12 +336,19 @@ export function RoundResultsPhase({ room }: PhaseProps) {
                 onClick={() => replay(r.url)}
               />
               <Avatar player={author} />
-              <span className="flex-1 truncate font-semibold">{author.nickname}</span>
+              <span className="flex-1 truncate font-semibold">
+                {top && <span aria-hidden>👑 </span>}
+                {author.nickname}
+              </span>
               <DownloadButton
                 href={downloadUrl(r.url, recordingName(room, author))}
                 label={`Download ${author.nickname}’s attempt`}
               />
-              <span className="font-bold tabular-nums">
+              <span
+                className={`rounded-full px-2.5 py-0.5 font-display font-bold tabular-nums ${
+                  r.votes > 0 ? 'bg-accent text-accent-ink' : 'bg-surface-raised text-muted'
+                }`}
+              >
                 +{r.votes} {r.votes === 1 ? 'vote' : 'votes'}
               </span>
             </li>
@@ -298,38 +359,69 @@ export function RoundResultsPhase({ room }: PhaseProps) {
   );
 }
 
+const MEDALS = ['🥇', '🥈', '🥉'];
+/** Podium blocks: 1st is tallest; colors gold, silver, bronze. */
+const BLOCK = {
+  1: { height: 'h-28 sm:h-32', color: 'from-amber-300 to-amber-500 text-amber-950' },
+  2: { height: 'h-20 sm:h-24', color: 'from-slate-200 to-slate-400 text-slate-900' },
+  3: { height: 'h-14 sm:h-16', color: 'from-orange-300 to-orange-600 text-orange-950' },
+} as const;
+
 export function FinalResults({ room, me }: PhaseProps) {
   const ranked = [...room.players]
     .filter((p) => !p.isSpectator)
     .sort((a, b) => b.score - a.score)
     .map((p, _i, all) => ({ ...p, rank: 1 + all.filter((o) => o.score > p.score).length }));
-  const podium = ranked.filter((p) => p.rank <= 3);
-  const medal = ['🥇', '🥈', '🥉'];
+  const top = ranked.slice(0, 3);
+  // Displayed 2nd · 1st · 3rd; the order the blocks rise: 3rd, 2nd, then 1st.
+  const columns = [top[1], top[0], top[2]];
+  const riseOrder = [1, 2, 0];
+  // Ties for a medal beyond the three blocks.
+  const alsoOnPodium = ranked.slice(3).filter((p) => p.rank <= 3);
 
   return (
-    <div className="flex flex-col items-center gap-6 py-4">
-      <p className="text-3xl font-black">Game over!</p>
-      <ol className="flex w-full max-w-md flex-col gap-2" data-testid="podium">
-        {podium.map((p) => (
-          <li
-            key={p.id}
-            className={`flex items-center gap-3 rounded-xl px-4 py-3 ${
-              p.rank === 1 ? 'bg-amber-400/15 text-lg' : 'bg-slate-800/60'
-            }`}
-          >
-            <span aria-label={`Rank ${p.rank}`}>{medal[p.rank - 1]}</span>
-            <Avatar player={p} />
-            <span className="flex-1 truncate font-bold">{p.nickname}</span>
-            <span className="tabular-nums">
-              {p.score} {p.score === 1 ? 'point' : 'points'}
-            </span>
-          </li>
-        ))}
+    <div className="flex flex-col items-center gap-6 pt-6 pb-2">
+      <p className="animate-pop font-display text-4xl font-black">Game over!</p>
+      <ol
+        className="grid w-full max-w-md grid-cols-3 items-end gap-2 sm:gap-3"
+        data-testid="podium"
+      >
+        {columns.map((p, col) =>
+          p ? (
+            <li key={p.id} className="flex min-w-0 flex-col items-center gap-2">
+              <Avatar player={p} size={p.rank === 1 ? 'xl' : 'lg'} />
+              <span className="w-full truncate text-center font-display font-bold">
+                {p.nickname}
+              </span>
+              <span className="text-sm text-muted tabular-nums">
+                {p.score} {p.score === 1 ? 'point' : 'points'}
+              </span>
+              <div
+                className={`flex w-full origin-bottom animate-rise items-start justify-center rounded-t-control bg-gradient-to-b pt-2 font-display text-3xl font-black ${
+                  BLOCK[Math.min(p.rank, 3) as 1 | 2 | 3].height
+                } ${BLOCK[Math.min(p.rank, 3) as 1 | 2 | 3].color}`}
+                style={{ animationDelay: `${riseOrder[col]! * 250}ms` }}
+              >
+                <span aria-label={`Rank ${p.rank}`}>{MEDALS[p.rank - 1]}</span>
+              </div>
+            </li>
+          ) : (
+            <li key={`empty-${col}`} aria-hidden />
+          ),
+        )}
       </ol>
+      {alsoOnPodium.length > 0 && (
+        <p className="text-sm text-muted">
+          Also on the podium:{' '}
+          {alsoOnPodium.map((p) => `${MEDALS[p.rank - 1]} ${p.nickname}`).join(', ')}
+        </p>
+      )}
       {me?.isHost ? (
-        <Button onClick={() => void backToLobby()}>Back to the lobby</Button>
+        <Button size="lg" onClick={() => void backToLobby()}>
+          Back to the lobby
+        </Button>
       ) : (
-        <p className="text-slate-400">Waiting for the host to go back to the lobby…</p>
+        <p className="text-muted">Waiting for the host to go back to the lobby…</p>
       )}
     </div>
   );

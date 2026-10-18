@@ -1,12 +1,14 @@
 import { useEffect } from 'react';
 import type { Phase, RoomState } from '@cyrp/shared';
+import { useDocumentTitle } from '../../hooks/useDocumentTitle';
 import { preload, unlockAudio, useAudioUnlock } from '../../lib/audio';
 import { setDucked, useVoice } from '../../lib/voice';
 import { useGame } from '../../store';
+import { Header } from '../Header';
 import { RoomStatus } from '../RoomStatus';
 import { VoiceBar } from '../VoiceBar';
-import { Button, Card, Page } from '../ui';
-import { Avatar, SecondsLeft } from './bits';
+import { Avatar, Badge, Button, Card, Page } from '../ui';
+import { SecondsLeft } from './bits';
 import {
   FinalResults,
   PlaybackPhase,
@@ -43,6 +45,8 @@ export function GameView({ room }: { room: RoomState }) {
   const meId = useGame((s) => s.playerId);
   const me = room.players.find((p) => p.id === meId);
   const audioBlocked = useAudioUnlock((s) => s.blocked);
+  const round = `Round ${room.round}/${room.settings.rounds}`;
+  useDocumentTitle(`${room.code} · ${room.phase === 'FINAL_RESULTS' ? 'Final results' : round}`);
 
   // Turn voice down while game sounds play.
   useEffect(() => {
@@ -67,27 +71,33 @@ export function GameView({ room }: { room: RoomState }) {
   return (
     <Page>
       <RoomStatus room={room} />
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-sm text-slate-400">
-            Room <span className="font-mono">{room.code}</span>
-            {room.round > 0 && ` · Round ${room.round}/${room.settings.rounds}`}
-          </p>
-          <h1 className="text-2xl font-black" data-testid="phase">
-            {PHASE_LABEL[room.phase]}
-          </h1>
-        </div>
-        <p className="text-2xl font-bold text-slate-300">
-          <SecondsLeft deadline={room.deadline} />
-        </p>
-      </header>
+      <Header code={room.code} />
 
       {audioBlocked && (
-        <Button onClick={() => void unlockAudio()}>Click to enable game sound</Button>
+        <Button size="lg" onClick={() => void unlockAudio()}>
+          Click to enable game sound
+        </Button>
       )}
 
-      <Card>
-        <Phase room={room} me={me} />
+      {/* The stage: what's happening right now. Re-mounted (and animated in) on each phase. */}
+      <Card className="relative overflow-hidden">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            {room.round > 0 && room.phase !== 'FINAL_RESULTS' && (
+              <p className="text-xs font-semibold tracking-wider text-muted uppercase">{round}</p>
+            )}
+            <h1
+              className="font-display text-3xl font-extrabold tracking-tight sm:text-4xl"
+              data-testid="phase"
+            >
+              {PHASE_LABEL[room.phase]}
+            </h1>
+          </div>
+          <SecondsLeft deadline={room.deadline} />
+        </div>
+        <div key={`${room.phase}-${room.round}`} className="animate-enter">
+          <Phase room={room} me={me} />
+        </div>
       </Card>
 
       <Scoreboard room={room} meId={meId} />
@@ -104,36 +114,30 @@ function Scoreboard({ room, meId }: { room: RoomState; meId: string | null }) {
     (room.phase === 'VOTING' && room.votedPlayerIds.includes(id));
 
   return (
-    <Card>
-      <h2 className="mb-3 font-bold">Scores</h2>
+    <Card title="Scores">
       <ul className="grid gap-2 sm:grid-cols-2" data-testid="scoreboard">
         {players.map((p) => (
           <li
             key={p.id}
-            className={`flex items-center gap-3 rounded-xl bg-slate-800/60 px-3 py-2 ${
+            className={`flex items-center gap-3 rounded-control border border-line/60 bg-surface-raised/50 px-3 py-2 ${
               p.connected ? '' : 'opacity-50'
             }`}
           >
-            <span
-              className={`rounded-full ${
-                peers[p.id]?.speaking
-                  ? 'ring-[3px] ring-emerald-400 ring-offset-2 ring-offset-slate-800'
-                  : ''
-              }`}
-            >
-              <Avatar player={p} />
-            </span>
-            <span className="min-w-0 flex-1 truncate">
-              {p.nickname}
-              {p.id === meId && <span className="text-slate-400"> (you)</span>}
-              {p.isSpectator && <span className="ml-2 text-xs text-slate-400">watching</span>}
+            <Avatar player={p} speaking={peers[p.id]?.speaking ?? false} />
+            <span className="flex min-w-0 flex-1 items-center gap-2">
+              <span className="truncate font-semibold">{p.nickname}</span>
+              {p.id === meId && <span className="text-sm text-muted">(you)</span>}
+              {p.isSpectator && <Badge>watching</Badge>}
             </span>
             {done(p.id) && (
-              <span className="text-emerald-400" title="Done">
+              <span className="animate-pop font-bold text-success" title="Done">
                 ✓
               </span>
             )}
-            <span className="font-bold tabular-nums" data-testid={`score-${p.nickname}`}>
+            <span
+              className="min-w-8 rounded-full bg-accent/15 px-2 py-0.5 text-center font-display font-bold text-accent-strong tabular-nums"
+              data-testid={`score-${p.nickname}`}
+            >
               {p.score}
             </span>
           </li>

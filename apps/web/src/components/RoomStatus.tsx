@@ -57,19 +57,18 @@ export function RoomStatus({ room }: { room: RoomState }) {
   const { tone, text } = roomStatus(room, connected);
   const t = TONES[tone];
   return (
-    <div className="sticky top-0 z-20 -mx-4 bg-slate-950/85 px-4 pt-2 pb-1 backdrop-blur">
+    <div className="sticky top-0 z-20 -mx-4 bg-bg/80 px-4 pt-2 pb-2 backdrop-blur-md">
       <p
         role="status"
         data-testid="room-status"
         data-tone={tone}
-        className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-medium ${t.bar}`}
+        className={`flex items-center gap-2.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${t.bar}`}
       >
         <span className={`size-2.5 shrink-0 rounded-full ${t.dot}`} aria-hidden />
         <span className="truncate">
           {text}
           {watching && ' · you’re watching this game'}
         </span>
-        <span className="ml-auto font-mono text-xs opacity-70">{room.code}</span>
       </p>
     </div>
   );

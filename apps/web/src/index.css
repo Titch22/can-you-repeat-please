@@ -1,5 +1,136 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/outfit';
 @import 'tailwindcss';
 
-body {
-  @apply bg-slate-950 text-slate-100 antialiased;
+/*
+ * Design tokens. Components use these semantic names (bg-surface, text-muted, bg-accent…)
+ * instead of raw palette shades, so the look stays consistent and can be tuned in one place.
+ */
+@theme {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Outfit Variable', 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+
+  /* Surfaces: dark slate. */
+  --color-bg: var(--color-slate-950);
+  --color-surface: rgb(15 23 42 / 0.78);
+  --color-surface-raised: var(--color-slate-800);
+  --color-surface-sunken: rgb(2 6 23 / 0.7);
+  --color-line: var(--color-slate-800);
+  --color-line-strong: var(--color-slate-700);
+  --color-ink: var(--color-slate-100);
+  --color-muted: var(--color-slate-400);
+  --color-subtle: var(--color-slate-500);
+
+  /* Accent: amber. Text on it is near-black. */
+  --color-accent: var(--color-amber-400);
+  --color-accent-strong: var(--color-amber-300);
+  --color-accent-ink: var(--color-slate-950);
+
+  /* States. */
+  --color-success: var(--color-emerald-400);
+  --color-danger: var(--color-rose-400);
+  --color-rec: var(--color-rose-500);
+
+  --radius-control: 0.75rem;
+  --radius-card: 1.25rem;
+
+  --shadow-card: inset 0 1px 0 0 rgb(255 255 255 / 0.04), 0 16px 40px -24px rgb(0 0 0 / 0.8);
+  --shadow-glow: 0 0 0 3px rgb(251 191 36 / 0.35);
+  --shadow-accent: 0 8px 24px -10px rgb(251 191 36 / 0.55);
+
+  /* Motion (disabled below under prefers-reduced-motion). */
+  --animate-enter: enter 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-pop: pop 420ms cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  --animate-shake: shake 480ms ease-in-out both;
+  --animate-rise: rise 650ms cubic-bezier(0.2, 0.9, 0.2, 1) both;
+  --animate-bump: bump 280ms ease-out;
+
+  @keyframes enter {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+  @keyframes pop {
+    0% {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    60% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+  @keyframes shake {
+    0%,
+    100% {
+      transform: none;
+    }
+    20%,
+    60% {
+      transform: translateX(-8px) rotate(-2deg);
+    }
+    40%,
+    80% {
+      transform: translateX(8px) rotate(2deg);
+    }
+  }
+  @keyframes rise {
+    from {
+      transform: scaleY(0);
+    }
+    to {
+      transform: scaleY(1);
+    }
+  }
+  @keyframes bump {
+    40% {
+      transform: scale(1.12);
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    @apply min-h-screen bg-bg font-sans text-ink antialiased;
+    /* A faint amber glow at the top, so the page isn't a flat dark field. */
+    background-image:
+      radial-gradient(60rem 28rem at 50% -10rem, rgb(251 191 36 / 0.1), transparent 70%),
+      radial-gradient(40rem 30rem at 100% 0, rgb(56 189 248 / 0.05), transparent 70%);
+    background-attachment: fixed;
+  }
+
+  input[type='range'] {
+    accent-color: var(--color-accent);
+  }
+
+  input[type='checkbox'] {
+    accent-color: var(--color-accent);
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 1ms !important;
+    animation-delay: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

@@ -4,7 +4,7 @@ import { unlockAudio, useAudioUnlock } from '../lib/audio';
 import { MAX_MIC_BOOST, MIN_MIC_BOOST, pickInput, setMicBoost, useDevices } from '../lib/devices';
 import { setInputDevice } from '../lib/mic';
 import { MicIcon, MicOffIcon } from './icons';
-import { Button, ErrorText } from './ui';
+import { Button, ErrorText, Slider, inputClass } from './ui';
 
 /** Compact live mic level, shown next to the mute button. */
 export function MicLevel({ muted }: { muted: boolean }) {
@@ -26,18 +26,18 @@ export function MicLevel({ muted }: { muted: boolean }) {
       data-testid="mic-level"
       data-detected={detected}
       data-level={level}
-      className={`flex items-center gap-2 rounded-full px-2 py-1 ${blocked ? 'cursor-pointer' : 'cursor-default'}`}
+      className={`flex items-center gap-2 rounded-full px-2 py-1 focus-visible:shadow-glow ${blocked ? 'cursor-pointer' : 'cursor-default'}`}
     >
       <span
         className={`transition-colors ${
-          detected ? (muted ? 'text-slate-300' : 'text-emerald-400') : 'text-slate-500'
+          detected ? (muted ? 'text-slate-300' : 'text-success') : 'text-subtle'
         }`}
       >
         {muted ? <MicOffIcon className="size-4" /> : <MicIcon className="size-4" />}
       </span>
-      <span className="h-2 w-16 overflow-hidden rounded-full bg-slate-800">
+      <span className="h-2 w-14 overflow-hidden rounded-full bg-surface-raised sm:w-16">
         <span
-          className={`block h-full transition-[width] duration-75 ${muted ? 'bg-slate-500' : 'bg-emerald-400'}`}
+          className={`block h-full rounded-full transition-[width] duration-75 ${muted ? 'bg-subtle' : 'bg-success'}`}
           style={{ width: `${level * 100}%` }}
         />
       </span>
@@ -65,15 +65,15 @@ export function MicSettings({ locked }: { locked: boolean }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+    <div className="grid animate-enter gap-4 rounded-control border border-line bg-surface-sunken/70 p-4 sm:grid-cols-2">
       <label className="flex flex-col gap-1.5 text-sm">
-        <span className="text-slate-400">Microphone</span>
+        <span className="text-muted">Microphone</span>
         <select
           value={pickInput(inputId, inputs) ?? ''}
           onChange={(e) => void choose(e.target.value)}
           disabled={locked || busy}
           aria-label="Microphone"
-          className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-amber-400 disabled:opacity-60"
+          className={`${inputClass} py-2 disabled:opacity-60`}
         >
           <option value="">Browser default</option>
           {inputs.map((d, i) => (
@@ -83,47 +83,41 @@ export function MicSettings({ locked }: { locked: boolean }) {
           ))}
         </select>
       </label>
-      {locked && <p className="text-xs text-slate-400">You can switch mic after the recording.</p>}
+      {locked && <p className="text-xs text-muted">You can switch mic after the recording.</p>}
 
-      <label className="flex flex-col gap-1.5 text-sm">
-        <span className="flex justify-between text-slate-400">
-          Mic boost
-          <span className="font-semibold text-slate-100" data-testid="mic-boost-value">
-            {Math.round(micBoost * 100)}%
-          </span>
-        </span>
-        <input
-          type="range"
-          min={MIN_MIC_BOOST}
-          max={MAX_MIC_BOOST}
-          step={0.25}
-          value={micBoost}
-          onChange={(e) => setMicBoost(Number(e.target.value))}
-          aria-label="Mic boost"
-          className="accent-amber-400"
-        />
-        <span className="text-xs text-slate-500">
-          Raise it if friends say you’re too quiet. It only changes your voice in the chat.
-        </span>
-      </label>
+      <Slider
+        label="Mic boost"
+        display={`${Math.round(micBoost * 100)}%`}
+        valueTestId="mic-boost-value"
+        min={MIN_MIC_BOOST}
+        max={MAX_MIC_BOOST}
+        step={0.25}
+        value={micBoost}
+        onChange={(e) => setMicBoost(Number(e.target.value))}
+        hint="Raise it if friends say you’re too quiet. It only changes your voice in the chat."
+      />
 
-      <div className="flex flex-col gap-1.5 text-sm">
-        <span className="flex justify-between text-slate-400">
+      <div className="flex flex-col gap-2 text-sm sm:col-span-2">
+        <span className="flex justify-between text-muted">
           Speak to test your mic
-          <span className={detected ? 'text-emerald-300' : ''} data-testid="mic-test-status">
+          <span
+            className={detected ? 'font-semibold text-success' : ''}
+            data-testid="mic-test-status"
+          >
             {detected ? 'Sound detected ✓' : 'No sound'}
           </span>
         </span>
-        <div className="h-3 overflow-hidden rounded-full bg-slate-800">
+        <div className="h-3 overflow-hidden rounded-full bg-surface-raised">
           <div
-            className="h-full bg-emerald-400 transition-[width] duration-75"
+            className="h-full rounded-full bg-success transition-[width] duration-75"
             style={{ width: `${level * 100}%` }}
           />
         </div>
         {blocked && (
           <Button
             variant="secondary"
-            className="self-start py-1.5 text-sm"
+            size="sm"
+            className="self-start"
             onClick={() => void unlockAudio()}
           >
             Activate the mic test

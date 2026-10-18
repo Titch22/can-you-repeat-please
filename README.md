@@ -2,6 +2,8 @@
 
 A multiplayer browser party game. A sound plays, everyone tries to imitate it with their mic at the same time, and then the room listens to every attempt and votes for the best ones.
 
+**Play it:** https://game.cyrp.iamthesen.at/
+
 The lobby works like a Discord voice channel: everyone can talk and hear each other. The game mutes everyone only while recording.
 
 ## How a game goes

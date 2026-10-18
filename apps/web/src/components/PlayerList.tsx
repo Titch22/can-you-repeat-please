@@ -2,7 +2,7 @@ import { MAX_PLAYERS, type Player } from '@cyrp/shared';
 import { kickPlayer } from '../lib/actions';
 import { setPeerVolume, useVoice } from '../lib/voice';
 import { MicOffIcon } from './icons';
-import { Button, Card } from './ui';
+import { Avatar, Badge, Button, Card } from './ui';
 
 export function PlayerList({
   players,
@@ -14,13 +14,7 @@ export function PlayerList({
   amHost: boolean;
 }) {
   return (
-    <Card>
-      <h2 className="mb-3 flex items-baseline justify-between font-bold">
-        Players
-        <span className="text-sm font-normal text-slate-400">
-          {players.length}/{MAX_PLAYERS}
-        </span>
-      </h2>
+    <Card title="Players" subtitle={`${players.length}/${MAX_PLAYERS}`}>
       <ul className="flex flex-col gap-2" data-testid="player-list">
         {players.map((p) => (
           <PlayerRow key={p.id} player={p} isMe={p.id === meId} canKick={amHost && p.id !== meId} />
@@ -45,47 +39,31 @@ function PlayerRow({
 
   return (
     <li
-      className={`flex flex-col gap-2 rounded-xl bg-slate-800/60 px-3 py-2 ${
+      className={`flex animate-enter flex-col gap-2 rounded-control border border-line/60 bg-surface-raised/50 px-3 py-2.5 transition-opacity ${
         p.connected ? '' : 'opacity-50'
       }`}
       data-testid={`player-${p.nickname}`}
     >
       <div className="flex items-center gap-3">
-        <span
-          className={`relative grid size-9 shrink-0 place-items-center rounded-full font-bold text-slate-950 transition ${
-            speaking ? 'ring-[3px] ring-emerald-400 ring-offset-2 ring-offset-slate-800' : ''
-          }`}
-          style={{ backgroundColor: p.color }}
-          data-speaking={speaking}
-          aria-hidden
-        >
-          {p.nickname[0]?.toUpperCase()}
+        <Avatar player={p} speaking={speaking}>
           {voice && !voice.micOn && (
             <span
-              className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-slate-950 text-rose-400"
+              className="absolute -right-1 -bottom-1 grid size-4 place-items-center rounded-full bg-bg text-danger"
               title="Mic off"
             >
               <MicOffIcon className="size-2.5" />
             </span>
           )}
-        </span>
-        <span className="min-w-0 flex-1 truncate">
-          {p.nickname}
-          {isMe && <span className="text-slate-400"> (you)</span>}
-          {p.isHost && (
-            <span className="ml-2 rounded-md bg-amber-400/15 px-1.5 py-0.5 text-xs text-amber-300">
-              host
-            </span>
-          )}
-          {!p.connected && <span className="ml-2 text-xs text-slate-400">reconnecting…</span>}
-          {p.connected && !voice && <span className="ml-2 text-xs text-slate-500">no voice</span>}
+        </Avatar>
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="truncate font-semibold">{p.nickname}</span>
+          {isMe && <span className="text-sm text-muted">(you)</span>}
+          {p.isHost && <Badge tone="accent">host</Badge>}
+          {!p.connected && <Badge>reconnecting…</Badge>}
+          {p.connected && !voice && <span className="text-xs text-subtle">no voice</span>}
         </span>
         {canKick && (
-          <Button
-            variant="danger"
-            className="px-2 py-1 text-sm"
-            onClick={() => void kickPlayer(p.id)}
-          >
+          <Button variant="danger" size="sm" onClick={() => void kickPlayer(p.id)}>
             Kick
           </Button>
         )}
@@ -94,7 +72,7 @@ function PlayerRow({
           when someone joins voice and shift the page under the user's cursor. */}
       {!isMe && (
         <label
-          className={`flex items-center gap-2 pl-12 text-xs text-slate-400 ${voice ? '' : 'opacity-40'}`}
+          className={`flex items-center gap-2 pl-12 text-xs text-muted ${voice ? '' : 'opacity-40'}`}
         >
           <span aria-hidden>Vol</span>
           <input
@@ -106,9 +84,12 @@ function PlayerRow({
             onChange={(e) => setPeerVolume(p.id, Number(e.target.value))}
             disabled={!voice}
             aria-label={`Volume of ${p.nickname}`}
-            className={`h-1 flex-1 ${volume > 1 ? 'accent-amber-400' : 'accent-slate-400'}`}
+            className={`h-1.5 flex-1 cursor-pointer disabled:cursor-default ${volume > 1 ? '' : 'grayscale'}`}
           />
-          <span className="w-10 text-right tabular-nums" data-testid={`volume-${p.nickname}`}>
+          <span
+            className={`w-10 text-right tabular-nums ${volume > 1 ? 'font-semibold text-accent' : ''}`}
+            data-testid={`volume-${p.nickname}`}
+          >
             {Math.round(volume * 100)}%
           </span>
         </label>

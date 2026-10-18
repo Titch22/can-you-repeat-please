@@ -1,10 +1,12 @@
-import { useState, type FormEvent } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import { Link, Navigate, useParams } from 'react-router';
 import { RoomCodeSchema } from '@cyrp/shared';
 import { GameView } from '../components/game/GameView';
 import { Lobby } from '../components/Lobby';
+import { Logo } from '../components/Logo';
 import { ProfileFields, useProfile } from '../components/ProfileFields';
 import { Button, Card, ErrorText, Page } from '../components/ui';
+import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { joinRoom } from '../lib/actions';
 import { errorMessage } from '../lib/errors';
 import { useGame } from '../store';
@@ -21,24 +23,37 @@ export function RoomPage() {
   }
   if (resuming) {
     return (
-      <Page>
-        <p className="m-auto text-slate-400">Reconnecting…</p>
-      </Page>
+      <Centered>
+        <p className="animate-pulse text-muted">Reconnecting…</p>
+      </Centered>
     );
   }
   if (!RoomCodeSchema.safeParse(code).success) {
     return (
-      <Page>
-        <p className="m-auto text-center">
+      <Centered>
+        <p className="text-center">
           “{code}” is not a valid room code.{' '}
-          <Link to="/" className="text-amber-300 underline">
+          <Link to="/" className="font-semibold text-accent underline underline-offset-2">
             Go home
           </Link>
         </p>
-      </Page>
+      </Centered>
     );
   }
   return <JoinCard code={code} />;
+}
+
+function Centered({ children }: { children: ReactNode }) {
+  return (
+    <Page>
+      <div className="m-auto flex flex-col items-center gap-6">
+        <Link to="/" aria-label="Home">
+          <Logo size="sm" />
+        </Link>
+        {children}
+      </div>
+    </Page>
+  );
 }
 
 /** Shown when arriving from an invite link without a seat in the room yet. */
@@ -46,6 +61,7 @@ function JoinCard({ code }: { code: string }) {
   const { profile, raw, update, valid } = useProfile();
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  useDocumentTitle(`Join ${code}`);
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -59,21 +75,29 @@ function JoinCard({ code }: { code: string }) {
 
   return (
     <Page>
-      <Card className="m-auto w-full max-w-md">
-        <form onSubmit={onSubmit} className="flex flex-col gap-5">
-          <h1 className="text-2xl font-black">
-            Join room <span className="font-mono tracking-widest">{code}</span>
-          </h1>
-          <ProfileFields value={raw} onChange={update} />
-          <Button type="submit" disabled={!valid || busy}>
-            Join
-          </Button>
-          <ErrorText>{error}</ErrorText>
-          <Link to="/" className="text-center text-sm text-slate-400 underline">
-            Back to home
-          </Link>
-        </form>
-      </Card>
+      <div className="m-auto flex w-full max-w-md animate-enter flex-col items-center gap-6">
+        <Link to="/" aria-label="Home">
+          <Logo size="sm" />
+        </Link>
+        <Card className="w-full">
+          <form onSubmit={onSubmit} className="flex flex-col gap-5">
+            <h1 className="font-display text-2xl font-extrabold">
+              Join room <span className="font-mono tracking-widest text-accent">{code}</span>
+            </h1>
+            <ProfileFields value={raw} onChange={update} />
+            <Button type="submit" size="lg" disabled={!valid || busy}>
+              Join
+            </Button>
+            <ErrorText>{error}</ErrorText>
+            <Link
+              to="/"
+              className="text-center text-sm text-muted underline underline-offset-2 hover:text-ink"
+            >
+              Back to home
+            </Link>
+          </form>
+        </Card>
+      </div>
     </Page>
   );
 }

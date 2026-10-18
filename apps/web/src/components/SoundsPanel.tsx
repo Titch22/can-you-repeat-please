@@ -11,7 +11,7 @@ import { deleteSound, updateSettings, uploadSound } from '../lib/actions';
 import { replay } from '../lib/audio';
 import { errorMessage } from '../lib/errors';
 import { PlayButton } from './game/bits';
-import { Button, Card, ErrorText } from './ui';
+import { Button, Card, ErrorText, inputClass } from './ui';
 
 /**
  * The room's sounds: the default pack plus uploads, each with a checkbox deciding whether it
@@ -47,41 +47,45 @@ export function SoundsPanel({
     setSelected(isSelected.has(id) ? selectedIds.filter((x) => x !== id) : [...selectedIds, id]);
 
   return (
-    <Card>
-      <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-bold">
-          Sounds
-          <span className="ml-2 text-sm font-normal text-slate-400" data-testid="sound-count">
-            {selected} of {room.sounds.length} in the game
-          </span>
-        </h2>
-        {amHost && (
-          <div className="flex gap-1 text-sm">
+    <Card
+      className="lg:flex lg:min-h-0 lg:flex-col"
+      title="Sounds"
+      subtitle={
+        <span data-testid="sound-count">
+          {selected} of {room.sounds.length} in the game
+        </span>
+      }
+      actions={
+        amHost && (
+          <>
             <Button
               variant="ghost"
-              className="px-2 py-1"
+              size="sm"
               onClick={() => setSelected(room.sounds.map((s) => s.id))}
             >
               All
             </Button>
-            <Button variant="ghost" className="px-2 py-1" onClick={() => setSelected([])}>
+            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
               None
             </Button>
             <Button
               variant="ghost"
-              className="px-2 py-1"
+              size="sm"
               disabled={uploads.length === 0}
               onClick={() => setSelected(uploads.map((s) => s.id))}
             >
               Only uploads
             </Button>
-          </div>
-        )}
-      </div>
-
+          </>
+        )
+      }
+    >
       <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_PLAYER - myUploads} />
 
-      <ul className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3" data-testid="sound-grid">
+      <ul
+        className="-mx-1 mt-4 grid gap-2 px-1 pb-1 sm:grid-cols-2 lg:min-h-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] lg:content-start lg:overflow-y-auto"
+        data-testid="sound-grid"
+      >
         {room.sounds.map((sound) => (
           <SoundTile
             key={sound.id}
@@ -94,9 +98,7 @@ export function SoundsPanel({
           />
         ))}
       </ul>
-      {!amHost && (
-        <p className="mt-3 text-sm text-slate-400">The host picks which sounds are in.</p>
-      )}
+      {!amHost && <p className="mt-3 text-sm text-muted">The host picks which sounds are in.</p>}
     </Card>
   );
 }
@@ -127,9 +129,11 @@ function SoundTile({
   return (
     <li
       onClick={onTileClick}
-      className={`flex items-center gap-2 rounded-xl border px-2 py-1.5 transition select-none ${
-        checked ? 'border-slate-700 bg-slate-800/60' : 'border-slate-800 bg-slate-900 opacity-60'
-      } ${canToggle ? 'cursor-pointer hover:border-amber-400/60' : ''}`}
+      className={`flex items-center gap-2 rounded-control border border-l-4 py-1.5 pr-2 pl-2 transition select-none ${
+        checked
+          ? 'border-line-strong border-l-accent bg-surface-raised/70'
+          : 'border-line border-l-transparent bg-surface-sunken/60 text-muted'
+      } ${canToggle ? 'cursor-pointer hover:border-accent/50' : ''}`}
       data-testid={`sound-${sound.label}`}
     >
       <input
@@ -138,14 +142,17 @@ function SoundTile({
         disabled={!canToggle}
         onChange={onToggle}
         aria-label={`Use “${sound.label}” in the game`}
-        className="size-4 shrink-0 cursor-pointer accent-amber-400 disabled:cursor-default"
+        className="size-4 shrink-0 cursor-pointer disabled:cursor-default"
       />
       <PlayButton label={`Play “${sound.label}”`} onClick={() => replay(sound.url)} />
       <span className="min-w-0 flex-1 leading-tight">
-        <span className="block truncate text-sm font-semibold" title={sound.label}>
+        <span
+          className={`block truncate text-sm font-semibold ${checked ? 'text-ink' : ''}`}
+          title={sound.label}
+        >
           {sound.label}
         </span>
-        <span className="block truncate text-xs text-slate-400">
+        <span className="block truncate text-xs text-subtle">
           {(sound.durationMs / 1000).toFixed(1)}s{uploader && ` · by ${uploader}`}
         </span>
       </span>
@@ -155,7 +162,7 @@ function SoundTile({
           onClick={() => void deleteSound(sound.id)}
           aria-label={`Delete “${sound.label}”`}
           title="Delete"
-          className="grid size-7 shrink-0 place-items-center rounded-full text-rose-300 transition hover:bg-rose-500/15"
+          className="grid size-7 shrink-0 place-items-center rounded-full text-rose-300 transition hover:bg-rose-500/15 focus-visible:shadow-glow"
         >
           ✕
         </button>
@@ -211,7 +218,7 @@ function UploadForm({ code, remaining }: { code: string; remaining: number }) {
   const labelOk = SoundLabelSchema.safeParse(label).success;
 
   return (
-    <div className="flex flex-col gap-2 rounded-xl border border-dashed border-slate-700 p-3">
+    <div className="flex flex-col gap-2 rounded-control border border-dashed border-line-strong bg-surface-sunken/40 p-3">
       <input
         ref={input}
         type="file"
@@ -227,24 +234,23 @@ function UploadForm({ code, remaining }: { code: string; remaining: number }) {
             onChange={(e) => setLabel(e.target.value)}
             maxLength={40}
             aria-label="Sound name"
-            className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 outline-none focus:border-amber-400"
+            className={`${inputClass} min-w-0 flex-1 py-2`}
           />
-          <Button onClick={() => void submit()} disabled={!labelOk || busy} className="py-2">
+          <Button onClick={() => void submit()} disabled={!labelOk || busy}>
             {busy ? 'Uploading…' : 'Add sound'}
           </Button>
-          <Button variant="ghost" onClick={() => choose(null)} disabled={busy} className="py-2">
+          <Button variant="ghost" onClick={() => choose(null)} disabled={busy}>
             Cancel
           </Button>
         </div>
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-muted">
             Bring your own sounds: {MAX_CUSTOM_SOUND_MS / 1000}s max,{' '}
             {MAX_UPLOAD_BYTES / 1024 / 1024} MB max. They’re deleted when the lobby closes.
           </p>
           <Button
             variant="secondary"
-            className="py-2"
             disabled={remaining <= 0}
             onClick={() => input.current?.click()}
           >
