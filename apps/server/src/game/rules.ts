@@ -1,4 +1,10 @@
-import { MAX_VOTES_PER_PLAYER, type RoundResult, type SoundRef } from '@cyrp/shared';
+import {
+  MAX_VOTES_PER_PLAYER,
+  type Performance,
+  type RoundResult,
+  type SoundRef,
+  type Team,
+} from '@cyrp/shared';
 import { RoomError } from '../rooms/RoomManager.js';
 
 export type Rng = () => number;
@@ -23,7 +29,10 @@ export function pickSounds(pool: readonly SoundRef[], rounds: number, rng: Rng):
   return picked.slice(0, rounds);
 }
 
-/** Throws the matching RoomError if `clipIds` is not a valid ballot for `ownClipId`'s owner. */
+/**
+ * Throws the matching RoomError if `clipIds` (performance ids) is not a valid ballot for the
+ * player whose own performance is `ownClipId`.
+ */
 export function validateVote(
   clipIds: readonly string[],
   roundClipIds: readonly string[],
@@ -37,21 +46,71 @@ export function validateVote(
   }
 }
 
-/** Votes received by each clip, most voted first (ties keep playback order). */
+/** Votes received by each performance, most voted first (ties keep playback order). */
 export function tally(
-  recordings: readonly { clipId: string; playerId: string; url: string }[],
-  clipOrder: readonly string[],
+  performances: readonly Performance[],
   ballots: Iterable<readonly string[]>,
 ): RoundResult[] {
-  const counts = new Map<string, number>(clipOrder.map((id) => [id, 0]));
+  const counts = new Map<string, number>(performances.map((p) => [p.id, 0]));
   for (const ballot of ballots) {
     for (const id of ballot) if (counts.has(id)) counts.set(id, counts.get(id)! + 1);
   }
-  const byClip = new Map(recordings.map((r) => [r.clipId, r]));
-  return clipOrder
-    .map((clipId) => {
-      const r = byClip.get(clipId)!;
-      return { clipId, playerId: r.playerId, url: r.url, votes: counts.get(clipId)! };
-    })
+  return performances
+    .map((p) => ({ performanceId: p.id, playerIds: p.playerIds, votes: counts.get(p.id)! }))
     .sort((a, b) => b.votes - a.votes);
+}
+
+/**
+ * Teams mode: random pairs, each member voicing one character (A or B, at random). With an
+ * odd number of players, the last one is alone and voices both.
+ */
+export function pairTeams(playerIds: readonly string[], round: number, rng: Rng): Team[] {
+  const shuffled = shuffle(playerIds, rng);
+  const teams: Team[] = [];
+  for (let i = 0; i < shuffled.length; i += 2) {
+    const [first, second] = [shuffled[i]!, shuffled[i + 1]];
+    const id = `team-${round}-${teams.length + 1}`;
+    if (second === undefined) {
+      teams.push({ id, members: [{ playerId: first, role: 'both' }] });
+    } else {
+      const [a, b] = rng() < 0.5 ? [first, second] : [second, first];
+      teams.push({
+        id,
+        members: [
+          { playerId: a, role: 'A' },
+          { playerId: b, role: 'B' },
+        ],
+      });
+    }
+  }
+  return teams;
+}
+
+/**
+ * What gets played and voted on, in a random order. Classic: one performance per recording.
+ * Teams: one per team with at least one recording (a member who didn't record is still part of
+ * it, and scores with their team; their lines are just silent).
+ */
+export function buildPerformances(
+  recordings: readonly { playerId: string; clipId: string; url: string }[],
+  teams: readonly Team[] | null,
+  durationMs: number,
+  rng: Rng,
+): Performance[] {
+  const performances: Performance[] = teams
+    ? teams.flatMap((team) => {
+        const parts = team.members.flatMap((m) => {
+          const rec = recordings.find((r) => r.playerId === m.playerId);
+          return rec ? [{ playerId: m.playerId, url: rec.url, role: m.role }] : [];
+        });
+        if (parts.length === 0) return [];
+        return [{ id: team.id, playerIds: team.members.map((m) => m.playerId), parts, durationMs }];
+      })
+    : recordings.map((r) => ({
+        id: r.clipId,
+        playerIds: [r.playerId],
+        parts: [{ playerId: r.playerId, url: r.url, role: null }],
+        durationMs,
+      }));
+  return shuffle(performances, rng);
 }

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { MAX_UPLOAD_BYTES, TagSchema, type LibrarySound } from '@cyrp/shared';
+import { LinesEditor } from '../components/admin/LinesEditor';
 import { PlayButton } from '../components/game/bits';
 import { Logo } from '../components/Logo';
 import {
@@ -325,6 +326,7 @@ function SoundRow({
 }) {
   const [label, setLabel] = useState(sound.label);
   const [newTag, setNewTag] = useState('');
+  const [editingLines, setEditingLines] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -414,8 +416,18 @@ function SoundRow({
             className="w-24 rounded-full border border-dashed border-line-strong bg-transparent px-2.5 py-0.5 text-xs outline-none focus:border-accent"
           />
         </form>
+        <button
+          type="button"
+          onClick={() => setEditingLines(!editingLines)}
+          aria-expanded={editingLines}
+          className="ml-auto rounded-full px-2.5 py-0.5 text-xs font-semibold text-muted hover:bg-surface-raised hover:text-ink"
+        >
+          {sound.lines.length ? `Lines (${sound.lines.length})` : 'Lines'}{' '}
+          {editingLines ? '▴' : '▾'}
+        </button>
         <ErrorText>{error}</ErrorText>
       </div>
+      {editingLines && <LinesEditor sound={sound} token={token} onChanged={onChanged} />}
     </li>
   );
 }

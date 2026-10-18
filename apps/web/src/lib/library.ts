@@ -22,6 +22,7 @@ export const toLibraryRef = (s: LibrarySound): LibraryRef => ({
   durationMs: s.durationMs,
   url: s.url,
   tags: s.tags,
+  lines: s.lines,
 });
 
 export async function fetchLibrary(init?: RequestInit): Promise<LibrarySound[]> {

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import type { AudioFormat } from '@cyrp/audio';
-import type { LibrarySound, LibrarySoundPatch, TagCount } from '@cyrp/shared';
+import type { DialogueLine, LibrarySound, LibrarySoundPatch, TagCount } from '@cyrp/shared';
 
 export interface LibraryQuery {
   /** Matches sounds having any of these tags. */
@@ -30,6 +30,8 @@ interface Row {
   duration_ms: number;
   file: string;
   tags: string | null;
+  /** JSON array of [startMs, endMs, speaker], in order. */
+  lines: string;
 }
 
 const SEP = '\u001f';
@@ -69,6 +71,14 @@ export class Library {
         PRIMARY KEY (sound_id, tag)
       );
       CREATE INDEX IF NOT EXISTS sound_tags_tag ON sound_tags(tag);
+      CREATE TABLE IF NOT EXISTS sound_lines (
+        sound_id TEXT NOT NULL REFERENCES sounds(id) ON DELETE CASCADE,
+        idx INTEGER NOT NULL,
+        start_ms INTEGER NOT NULL,
+        end_ms INTEGER NOT NULL,
+        speaker TEXT NOT NULL CHECK (speaker IN ('A', 'B')),
+        PRIMARY KEY (sound_id, idx)
+      );
     `);
   }
 
@@ -157,8 +167,14 @@ export class Library {
     return this.get(id)!;
   }
 
-  update(id: string, patch: LibrarySoundPatch): LibrarySound | undefined {
-    if (!this.get(id)) return undefined;
+  /**
+   * Applies `patch`. Undefined if the sound doesn't exist; 'LINES_OUT_OF_RANGE' if a line ends
+   * after the sound does (the rest of the line checks are the schema's).
+   */
+  update(id: string, patch: LibrarySoundPatch): LibrarySound | 'LINES_OUT_OF_RANGE' | undefined {
+    const sound = this.get(id);
+    if (!sound) return undefined;
+    if (patch.lines?.some((l) => l.endMs > sound.durationMs)) return 'LINES_OUT_OF_RANGE';
     this.transaction(() => {
       if (patch.label !== undefined) {
         this.db.prepare('UPDATE sounds SET label = ? WHERE id = ?').run(patch.label, id);
@@ -166,6 +182,13 @@ export class Library {
       if (patch.tags !== undefined) {
         this.db.prepare('DELETE FROM sound_tags WHERE sound_id = ?').run(id);
         this.setTags(id, patch.tags);
+      }
+      if (patch.lines !== undefined) {
+        this.db.prepare('DELETE FROM sound_lines WHERE sound_id = ?').run(id);
+        const insert = this.db.prepare(
+          'INSERT INTO sound_lines (sound_id, idx, start_ms, end_ms, speaker) VALUES (?, ?, ?, ?, ?)',
+        );
+        patch.lines.forEach((l, i) => insert.run(id, i, l.startMs, l.endMs, l.speaker));
       }
     });
     return this.get(id);
@@ -186,7 +209,9 @@ export class Library {
     const rows = this.db
       .prepare(
         `SELECT s.id, s.label, s.duration_ms, s.file,
-           (SELECT group_concat(tag, '${SEP}') FROM (SELECT tag FROM sound_tags t WHERE t.sound_id = s.id ORDER BY tag)) AS tags
+           (SELECT group_concat(tag, '${SEP}') FROM (SELECT tag FROM sound_tags t WHERE t.sound_id = s.id ORDER BY tag)) AS tags,
+           (SELECT json_group_array(json_array(start_ms, end_ms, speaker))
+              FROM (SELECT * FROM sound_lines l WHERE l.sound_id = s.id ORDER BY idx)) AS lines
          FROM sounds s ${where}
          ORDER BY s.label COLLATE NOCASE, s.id`,
       )
@@ -196,6 +221,9 @@ export class Library {
       label: r.label,
       durationMs: r.duration_ms,
       tags: r.tags ? r.tags.split(SEP) : [],
+      lines: (JSON.parse(r.lines) as [number, number, DialogueLine['speaker']][]).map(
+        ([startMs, endMs, speaker]) => ({ startMs, endMs, speaker }),
+      ),
       url: `${this.publicUrl}/files/${r.file}`,
     }));
   }

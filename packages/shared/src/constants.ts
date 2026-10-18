@@ -1,5 +1,7 @@
 export const MAX_PLAYERS = 8;
 export const MIN_PLAYERS = 2;
+/** Teams mode: at least two teams, so there is always someone else's team to vote for. */
+export const MIN_PLAYERS_TEAMS = 3;
 export const MAX_VOTES_PER_PLAYER = 2;
 export const ROOM_CODE_LENGTH = 4;
 export const RECONNECT_GRACE_MS = 30_000;
@@ -15,6 +17,10 @@ export const MAX_CUSTOM_SOUNDS_PER_ROOM = 200;
 /** Prefix of library sound ids inside a room's selection (`lib:2-hours-later`). */
 export const LIBRARY_ID_PREFIX = 'lib:';
 export const MAX_TAGS_PER_SOUND = 20;
+/** Library sounds with this tag (and lines for both characters) are Teams mode dialogues. */
+export const TEAM_TAG = 'team';
+export const MAX_DIALOGUE_LINES = 30;
+export const MIN_DIALOGUE_LINE_MS = 300;
 /** How long after the recording window uploads are still accepted. */
 export const RECORDING_UPLOAD_GRACE_MS = 3_000;
 

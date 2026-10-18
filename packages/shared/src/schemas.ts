@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import { MAX_TAGS_PER_SOUND, MAX_VOTES_PER_PLAYER, ROOM_CODE_LENGTH } from './constants.js';
+import {
+  MAX_DIALOGUE_LINES,
+  MAX_TAGS_PER_SOUND,
+  MAX_VOTES_PER_PLAYER,
+  MIN_DIALOGUE_LINE_MS,
+  ROOM_CODE_LENGTH,
+} from './constants.js';
 
 export const PhaseSchema = z.enum([
   'LOBBY',
@@ -20,7 +26,11 @@ export const RoomCodeSchema = z
   .toUpperCase()
   .regex(new RegExp(`^[A-Z]{${ROOM_CODE_LENGTH}}$`));
 
+/** classic: everyone imitates the same sound. teams: pairs dub the two characters of a dialogue. */
+export const GameModeSchema = z.enum(['classic', 'teams']);
+
 export const SettingsSchema = z.object({
+  mode: GameModeSchema,
   rounds: z.number().int().min(1).max(20),
   /** Sounds the host ticked for the game (`lib:` library ids or uploads). None by default. */
   selectedSoundIds: z.array(z.string().max(100)).max(2000),
@@ -29,6 +39,7 @@ export const SettingsSchema = z.object({
 });
 
 export const DEFAULT_SETTINGS: z.infer<typeof SettingsSchema> = {
+  mode: 'classic',
   rounds: 5,
   selectedSoundIds: [],
   extraRecordMs: 1000,
@@ -63,11 +74,38 @@ export const TagSchema = z
   .regex(/^[a-z0-9][a-z0-9 -]{0,23}$/);
 export const TagListSchema = z.array(TagSchema).max(MAX_TAGS_PER_SOUND);
 
+export const SpeakerSchema = z.enum(['A', 'B']);
+
+/** One line of a dialogue: who speaks, from when to when (ms from the start of the file). */
+export const DialogueLineSchema = z.object({
+  startMs: z.number().int().min(0),
+  endMs: z.number().int().positive(),
+  speaker: SpeakerSchema,
+});
+
+/** A dialogue's lines: in order, not overlapping, each long enough to say something. */
+export const DialogueLinesSchema = z
+  .array(DialogueLineSchema)
+  .max(MAX_DIALOGUE_LINES)
+  .superRefine((lines, ctx) => {
+    lines.forEach((line, i) => {
+      if (line.endMs - line.startMs < MIN_DIALOGUE_LINE_MS) {
+        ctx.addIssue({ code: 'custom', path: [i], message: 'line too short' });
+      }
+      const prev = lines[i - 1];
+      if (prev && line.startMs < prev.endMs) {
+        ctx.addIssue({ code: 'custom', path: [i], message: 'lines overlap or are out of order' });
+      }
+    });
+  });
+
 export const LibrarySoundSchema = z.object({
   id: z.string(),
   label: z.string(),
   durationMs: z.number().int().positive(),
   tags: z.array(z.string()),
+  /** Dialogue lines (Teams mode); empty for ordinary sounds. */
+  lines: z.array(DialogueLineSchema).default([]),
   /** Absolute (production) or root-relative (dev proxy) URL of the audio file. */
   url: z.string(),
 });
@@ -77,6 +115,8 @@ export const TagCountSchema = z.object({ name: z.string(), count: z.number().int
 export const LibrarySoundPatchSchema = z.object({
   label: SoundLabelSchema.optional(),
   tags: TagListSchema.optional(),
+  /** Replaces all lines; [] clears them. Must also end within the sound (checked by the server). */
+  lines: DialogueLinesSchema.optional(),
 });
 /** POST /v1/sounds/lookup */
 export const LibraryLookupSchema = z.object({ ids: z.array(z.string().max(100)).max(2000) });

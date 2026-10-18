@@ -88,6 +88,7 @@ describe('sounds API', () => {
       label: 'Screaming goat',
       durationMs: 1000,
       tags: ['animal', 'meme'],
+      lines: [],
       url: expect.stringMatching(/^https:\/\/sounds\.test\/files\/[0-9a-f]{64}\.wav$/),
     });
     await upload(wav(3, 400), 'label=Long%20moo&tag=animal');
@@ -159,12 +160,33 @@ describe('sounds API', () => {
     });
     expect(await edit.json()).toMatchObject({ id: 'a', label: 'Renamed', tags: ['new', 'other'] });
 
+    const setLines = (lines: unknown) =>
+      fetch(`${base}/v1/sounds/${a.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lines }),
+      });
+    const lines = [
+      { startMs: 0, endMs: 400, speaker: 'A' },
+      { startMs: 400, endMs: 1000, speaker: 'B' },
+    ];
+    expect(await (await setLines(lines)).json()).toMatchObject({ id: 'a', lines });
+    // Overlapping, too short, or past the end of the 1s sound.
+    for (const bad of [
+      [lines[1], lines[0]],
+      [{ startMs: 0, endMs: 100, speaker: 'A' }],
+      [{ startMs: 500, endMs: 1500, speaker: 'B' }],
+      [{ startMs: 0, endMs: 500, speaker: 'C' }],
+    ]) {
+      expect((await setLines(bad)).status).toBe(400);
+    }
+
     const lookup = await fetch(`${base}/v1/sounds/lookup`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ids: ['a', 'gone'] }),
     });
-    expect((await json<LibrarySound[]>(lookup)).map((s) => s.id)).toEqual(['a']);
+    expect(await json<LibrarySound[]>(lookup)).toMatchObject([{ id: 'a', lines }]);
 
     const files = () => fs.readdirSync(path.join(dir, 'files'));
     expect(files()).toHaveLength(1);

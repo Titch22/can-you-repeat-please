@@ -18,6 +18,14 @@ const T: Timing = {
 };
 
 const sound = (id: string): SoundRef => ({ id, label: id, durationMs: 1000, url: `/sounds/${id}` });
+const dialogue: SoundRef = {
+  ...sound('lib:d1'),
+  tags: ['team'],
+  lines: [
+    { startMs: 0, endMs: 500, speaker: 'A' },
+    { startMs: 500, endMs: 1000, speaker: 'B' },
+  ],
+};
 
 function setup(names = ['Alice', 'Bob', 'Carol']) {
   const voice: boolean[] = [];
@@ -25,12 +33,14 @@ function setup(names = ['Alice', 'Bob', 'Carol']) {
   // eslint-disable-next-line prefer-const
   let game: GameRunner;
   const rooms = new RoomManager({ onPresenceChanged: (room) => game.onPresenceChanged(room) });
-  // The library holds s1 and s2.
+  // The library holds s1 and s2, and d1: a dialogue (Teams mode).
   const library = {
     available: true,
     resolve: vi.fn(async (ids: string[]) => {
       if (!library.available) throw new RoomError('LIBRARY_UNAVAILABLE');
-      return ids.filter((x) => x === 's1' || x === 's2').map((x) => sound(`lib:${x}`));
+      return ids.flatMap((x) =>
+        x === 's1' || x === 's2' ? [sound(`lib:${x}`)] : x === 'd1' ? [dialogue] : [],
+      );
     }),
   };
   game = new GameRunner({
@@ -90,8 +100,9 @@ describe('GameRunner', () => {
     expect(voice).toEqual([true]);
     const { startsAt, endsAt } = room.game!.recording!;
     expect(endsAt - startsAt).toBe(1000 + room.settings.extraRecordMs);
-    // Clips stay hidden until playback.
-    expect(rooms.toState(room, id('Bob')).clips).toEqual([]);
+    // Recordings stay hidden until playback.
+    expect(rooms.toState(room, id('Bob')).performances).toEqual([]);
+    expect(rooms.toState(room, id('Bob')).teams).toBeNull();
 
     // Uploads arrive once the recording window has closed. With all of them in, the phase
     // still holds a "Time's up!" pause before playback.
@@ -108,17 +119,22 @@ describe('GameRunner', () => {
     // A longer pause before the first sound, then the shorter lead for the next ones.
     expect(room.game!.playback!.startsAt - Date.now()).toBe(T.playbackIntroMs);
     const items = room.game!.playback!.items;
-    expect(items.map((i) => i.kind)).toEqual(['reference', 'clip', 'clip', 'clip']);
+    expect(items.map((i) => i.kind)).toEqual([
+      'reference',
+      'performance',
+      'performance',
+      'performance',
+    ]);
     // Each attempt is shown with its author (players recognize each other's voices anyway).
-    expect(items.map((i) => i.playerId).sort()).toEqual(
-      [null, id('Alice'), id('Bob'), id('Carol')].sort(),
-    );
-    expect(rooms.toState(room, id('Bob')).myClipId).toBe('clip-Bob');
+    expect(
+      items.flatMap((i) => (i.kind === 'performance' ? i.performance.playerIds : [])).sort(),
+    ).toEqual([id('Alice'), id('Bob'), id('Carol')].sort());
+    expect(rooms.toState(room, id('Bob')).myPerformanceId).toBe('clip-Bob');
 
     advanceTo(room, 'VOTING');
-    expect(rooms.toState(room, id('Bob')).clips.find((c) => c.id === 'clip-Alice')?.playerId).toBe(
-      id('Alice'),
-    );
+    expect(
+      rooms.toState(room, id('Bob')).performances.find((p) => p.id === 'clip-Alice')?.playerIds,
+    ).toEqual([id('Alice')]);
     expect(await errorCode(() => game.vote(room.code, id('Alice'), ['clip-Alice']))).toBe(
       'CANNOT_VOTE_SELF',
     );
@@ -129,7 +145,7 @@ describe('GameRunner', () => {
     expect(room.phase).toBe('VOTING');
     game.vote(room.code, id('Carol'), []);
     expect(room.phase).toBe('ROUND_RESULTS');
-    expect(room.game!.roundResults!.map((r) => [r.clipId, r.votes])).toEqual([
+    expect(room.game!.roundResults!.map((r) => [r.performanceId, r.votes])).toEqual([
       ['clip-Carol', 2],
       ['clip-Bob', 1],
       ['clip-Alice', 0],
@@ -173,7 +189,7 @@ describe('GameRunner', () => {
     game.beginUpload(room, id('Bob'), 1);
     advanceTo(room, 'PLAYBACK');
     expect(game.finishUpload(room, id('Bob'), 'clip-Bob')).toBe(false);
-    expect(room.game!.clipOrder).toEqual(['clip-Alice']);
+    expect(room.game!.performances.map((p) => p.id)).toEqual(['clip-Alice']);
   });
 
   it('ends the game when fewer than 2 players remain, unmuting voice', async () => {
@@ -230,6 +246,88 @@ describe('GameRunner', () => {
     library.available = true;
     await game.start(room.code, id('Alice'));
     expect(room.phase).toBe('ROUND_INTRO');
+  });
+
+  it('plays a teams round: random pairs, one performance per team, both members score', async () => {
+    const { rooms, game, room, id } = setup(['Alice', 'Bob', 'Carol', 'Dave']);
+    room.settings.mode = 'teams';
+    room.settings.rounds = 1;
+    room.settings.selectedSoundIds = ['lib:s1', 'lib:d1']; // s1 isn't a dialogue
+    await game.start(room.code, id('Alice'));
+    expect(room.game!.sounds.map((s) => s.id)).toEqual(['lib:d1']);
+
+    // Teams are known from the round intro on.
+    const teams = rooms.toState(room, id('Alice')).teams!;
+    expect(teams).toHaveLength(2);
+    for (const t of teams) expect(t.members.map((m) => m.role).sort()).toEqual(['A', 'B']);
+    const teamOf = (name: string) =>
+      teams.find((t) => t.members.some((m) => m.playerId === id(name)))!;
+    expect(rooms.toState(room, id('Alice')).reference).toBeNull();
+    advanceTo(room, 'REFERENCE');
+    expect(rooms.toState(room, id('Alice')).reference?.lines).toEqual(dialogue.lines);
+
+    advanceTo(room, 'RECORDING');
+    vi.setSystemTime(room.game!.recording!.endsAt + 10);
+    // Dave doesn't record: his team still plays (his lines are silent) and he still scores.
+    for (const name of ['Alice', 'Bob', 'Carol']) {
+      game.beginUpload(room, id(name), 1);
+      game.finishUpload(room, id(name), `clip-${name}`);
+    }
+    advanceTo(room, 'PLAYBACK');
+    const items = room.game!.playback!.items;
+    expect(items.map((i) => i.kind)).toEqual(['reference', 'performance', 'performance']);
+    const perfs = room.game!.performances;
+    expect(perfs.map((p) => p.id).sort()).toEqual(teams.map((t) => t.id).sort());
+    const daveTeam = perfs.find((p) => p.id === teamOf('Dave').id)!;
+    expect(daveTeam.playerIds).toContain(id('Dave'));
+    expect(daveTeam.parts).toHaveLength(1);
+    for (const part of perfs.flatMap((p) => p.parts)) {
+      const member = teams.flatMap((t) => t.members).find((m) => m.playerId === part.playerId)!;
+      expect(part.role).toBe(member.role);
+    }
+
+    advanceTo(room, 'VOTING');
+    expect(rooms.toState(room, id('Alice')).myPerformanceId).toBe(teamOf('Alice').id);
+    const otherTeam = (name: string) => teams.find((t) => t !== teamOf(name))!.id;
+    expect(await errorCode(() => game.vote(room.code, id('Alice'), [teamOf('Alice').id]))).toBe(
+      'CANNOT_VOTE_SELF',
+    );
+    for (const name of ['Alice', 'Bob', 'Carol', 'Dave']) {
+      game.vote(room.code, id(name), [otherTeam(name)]);
+    }
+    expect(room.phase).toBe('ROUND_RESULTS');
+    expect(room.game!.roundResults!.map((r) => r.votes)).toEqual([2, 2]);
+    expect(room.players.map((p) => p.score)).toEqual([2, 2, 2, 2]);
+  });
+
+  it('puts the odd player alone, voicing both characters', async () => {
+    const { rooms, game, room, id } = setup(['Alice', 'Bob', 'Carol']);
+    room.settings.mode = 'teams';
+    room.settings.selectedSoundIds = ['lib:d1'];
+    await game.start(room.code, id('Alice'));
+    const teams = rooms.toState(room, id('Alice')).teams!;
+    expect(teams.map((t) => t.members.length).sort()).toEqual([1, 2]);
+    expect(teams.find((t) => t.members.length === 1)!.members[0]!.role).toBe('both');
+  });
+
+  it('needs 3 players and a ticked dialogue in teams mode', async () => {
+    const { rooms, game, room, id } = setup(['Alice', 'Bob']);
+    room.settings.mode = 'teams';
+    room.settings.selectedSoundIds = ['lib:d1'];
+    expect(await errorCode(() => game.start(room.code, id('Alice')))).toBe('NOT_ENOUGH_PLAYERS');
+    rooms.join(room.code, 'Carol', '#0000ff', 's-Carol');
+    room.settings.selectedSoundIds = ['lib:s1', 'lib:s2'];
+    expect(await errorCode(() => game.start(room.code, id('Alice')))).toBe('NO_DIALOGUES');
+    expect(room.phase).toBe('LOBBY');
+  });
+
+  it('ends a teams game when fewer than 3 players remain', async () => {
+    const { rooms, game, room, id } = setup(['Alice', 'Bob', 'Carol']);
+    room.settings.mode = 'teams';
+    room.settings.selectedSoundIds = ['lib:d1'];
+    await game.start(room.code, id('Alice'));
+    rooms.leave(room.code, id('Carol'));
+    expect(room.phase).toBe('FINAL_RESULTS');
   });
 
   it('starts only once when the host double-clicks', async () => {

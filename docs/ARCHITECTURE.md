@@ -72,6 +72,14 @@ LOBBY ─start─► ROUND_INTRO ─► REFERENCE ─► RECORDING ─► PLAYBA
 
 Fixed durations live in `apps/server/src/game/timing.ts`. `GAME_FAST=1` switches to shorter ones; the Playwright config sets it when it starts the server itself.
 
+### Teams mode
+
+- `GameState.mode` is fixed when the game starts. At each round start, `pairTeams` (rules.ts) shuffles the players into pairs with random A / B roles (one player alone, role `both`, when the count is odd).
+- **Recording is unchanged:** every player records over the whole scene, from the same synchronized start. A recording's timeline is therefore the scene's: line timecodes apply to it directly.
+- **Performances:** after recording, `buildPerformances` makes one per team that recorded (classic: one per recording). Votes, tallies and results all work on performances; every player of a performance scores its votes.
+- **Stitching happens in the browser** (`apps/web/src/lib/dialogue.ts`): for each line of the reference, the recording of whoever voices that line, from the line's start, for its length. `playSegmentsAt` (lib/audio.ts) schedules those slices on the decoded buffers with 15 ms fades, at the server-synchronized start, so everyone hears the stitched scene together. Downloads render the same segments in an `OfflineAudioContext` and encode a WAV.
+- **Dialogue lines** live in the sound library (`sound_lines` table), edited in `/admin` on a waveform.
+
 ## Voice and muting
 
 - **Joining:** after joining a room over Socket.IO, the client calls `POST /api/rooms/:code/voice-token`. The token is scoped to the LiveKit room `cyrp-<code>` with the identity `<playerId>`. The client then connects with `livekit-client`.

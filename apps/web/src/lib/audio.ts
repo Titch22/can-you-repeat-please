@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { serverNow } from './clock';
+import { encodeWav, type Segment } from './dialogue';
 import { normalizationGain } from './loudness';
 import { loadSession } from './storage';
 
@@ -129,4 +130,120 @@ let replaying: (() => void) | null = null;
 export function replay(url: string) {
   replaying?.();
   replaying = playAt(url, serverNow());
+}
+
+// ── Segments (performances, dialogue lines) ────────────────────────────────────
+
+/** Short fades at each cut so stitched lines don't click. */
+const FADE_S = 0.015;
+
+/**
+ * Schedules `segments` on `c`, the scene starting at context time `t0`. Segments already
+ * under way start mid-way; finished ones are skipped. Returns the created sources.
+ */
+function scheduleSegments(
+  c: BaseAudioContext,
+  destination: AudioNode,
+  segments: Segment[],
+  loaded: Map<string, LoadedSound>,
+  t0: number,
+) {
+  const sources: AudioBufferSourceNode[] = [];
+  for (const seg of segments) {
+    const sound = loaded.get(seg.url);
+    if (!sound) continue;
+    let start = t0 + seg.atMs / 1000;
+    let offset = seg.offsetMs / 1000;
+    // A recording can be a bit shorter than the scene.
+    let duration = Math.min(seg.durationMs / 1000, sound.buffer.duration - offset);
+    if (start < c.currentTime) {
+      const late = c.currentTime - start;
+      start += late;
+      offset += late;
+      duration -= late;
+    }
+    if (duration <= 0) continue;
+    const source = c.createBufferSource();
+    source.buffer = sound.buffer;
+    const level = c.createGain();
+    const fade = Math.min(FADE_S, duration / 4);
+    level.gain.setValueAtTime(0, start);
+    level.gain.linearRampToValueAtTime(sound.gain, start + fade);
+    level.gain.setValueAtTime(sound.gain, start + duration - fade);
+    level.gain.linearRampToValueAtTime(0, start + duration);
+    source.connect(level).connect(destination);
+    source.start(start, offset, duration);
+    sources.push(source);
+  }
+  return sources;
+}
+
+async function loadAll(segments: Segment[]) {
+  const urls = [...new Set(segments.map((s) => s.url))];
+  const sounds = await Promise.all(urls.map((u) => preload(u)));
+  return new Map(urls.map((u, i) => [u, sounds[i]!]));
+}
+
+/**
+ * Plays `segments` with the scene starting when the server clock reaches `startsAt`, so
+ * everyone hears it together. Returns a function that cancels or stops it.
+ */
+export function playSegmentsAt(segments: Segment[], startsAt: number) {
+  let sources: AudioBufferSourceNode[] = [];
+  let cancelled = false;
+  void loadAll(segments)
+    .then((loaded) => {
+      if (cancelled) return;
+      const c = audioContext();
+      if (c.state === 'suspended') void c.resume().catch(() => {});
+      const t0 = c.currentTime + (startsAt - serverNow()) / 1000;
+      sources = scheduleSegments(c, output(), segments, loaded, t0);
+    })
+    .catch((err) => console.warn('[audio] playback failed', err));
+  return () => {
+    cancelled = true;
+    for (const s of sources) {
+      try {
+        s.stop();
+      } catch {
+        // not started yet
+      }
+    }
+  };
+}
+
+/** Local replay of segments: stops any previous replay first. */
+export function replaySegments(segments: Segment[]) {
+  replaying?.();
+  replaying = playSegmentsAt(segments, serverNow());
+}
+
+/** Stops the current local replay, if any. */
+export function stopReplay() {
+  replaying?.();
+  replaying = null;
+}
+
+/** Renders `segments` (a scene of `durationMs`) to a WAV file, e.g. to download a performance. */
+export async function renderSegments(segments: Segment[], durationMs: number) {
+  const loaded = await loadAll(segments);
+  const rate = 44_100;
+  const offline = new OfflineAudioContext(1, Math.ceil((durationMs / 1000) * rate), rate);
+  const limit = offline.createDynamicsCompressor();
+  limit.threshold.value = -6;
+  limit.knee.value = 0;
+  limit.ratio.value = 20;
+  limit.connect(offline.destination);
+  scheduleSegments(offline, limit, segments, loaded, 0);
+  return encodeWav(await offline.startRendering());
+}
+
+/** Saves `blob` as `name` through a temporary link. */
+export function saveBlob(blob: Blob, name: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = name;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

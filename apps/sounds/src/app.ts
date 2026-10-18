@@ -147,6 +147,7 @@ export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsApp
     if (!patch.success) throw new LibraryError('INVALID_PAYLOAD');
     const sound = library.update(String(req.params.id), patch.data);
     if (!sound) throw new LibraryError('NOT_FOUND');
+    if (sound === 'LINES_OUT_OF_RANGE') throw new LibraryError('INVALID_PAYLOAD');
     res.json(sound);
   });
 

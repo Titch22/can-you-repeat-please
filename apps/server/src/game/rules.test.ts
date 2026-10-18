@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { SoundRef } from '@cyrp/shared';
+import type { Performance, SoundRef, Team } from '@cyrp/shared';
 import { RoomError } from '../rooms/RoomManager.js';
-import { pickSounds, shuffle, tally, validateVote } from './rules.js';
+import { buildPerformances, pairTeams, pickSounds, shuffle, tally, validateVote } from './rules.js';
 
 /** Deterministic pseudo-random sequence for repeatable shuffles. */
 function seeded(seed = 42) {
@@ -59,18 +59,100 @@ describe('validateVote', () => {
   });
 });
 
+const perf = (id: string, playerIds: string[]): Performance => ({
+  id,
+  playerIds,
+  parts: playerIds.map((playerId) => ({ playerId, url: `/${playerId}`, role: null })),
+  durationMs: 1000,
+});
+
 describe('tally', () => {
-  it('counts votes per clip, most voted first, ties in playback order', () => {
-    const recordings = [
-      { clipId: 'c1', playerId: 'p1', url: '/c1' },
-      { clipId: 'c2', playerId: 'p2', url: '/c2' },
-      { clipId: 'c3', playerId: 'p3', url: '/c3' },
-    ];
-    const results = tally(recordings, ['c3', 'c1', 'c2'], [['c1', 'c2'], ['c1'], ['c2', 'ghost']]);
-    expect(results.map((r) => [r.clipId, r.playerId, r.votes])).toEqual([
-      ['c1', 'p1', 2],
-      ['c2', 'p2', 2],
-      ['c3', 'p3', 0],
+  it('counts votes per performance, most voted first, ties in playback order', () => {
+    const performances = [perf('c3', ['p3']), perf('c1', ['p1']), perf('c2', ['p2', 'p4'])];
+    const results = tally(performances, [['c1', 'c2'], ['c1'], ['c2', 'ghost']]);
+    expect(results).toEqual([
+      { performanceId: 'c1', playerIds: ['p1'], votes: 2 },
+      { performanceId: 'c2', playerIds: ['p2', 'p4'], votes: 2 },
+      { performanceId: 'c3', playerIds: ['p3'], votes: 0 },
     ]);
+  });
+});
+
+describe('pairTeams', () => {
+  const ids = (n: number) => Array.from({ length: n }, (_, i) => `p${i + 1}`);
+  let seed = 1;
+  const rng = () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646;
+
+  it('pairs everyone once, with one A and one B per pair', () => {
+    for (let n = 2; n <= 8; n += 2) {
+      const teams = pairTeams(ids(n), 1, rng);
+      expect(teams).toHaveLength(n / 2);
+      expect(teams.flatMap((t) => t.members.map((m) => m.playerId)).sort()).toEqual(ids(n).sort());
+      for (const t of teams) expect(t.members.map((m) => m.role).sort()).toEqual(['A', 'B']);
+    }
+  });
+
+  it('leaves one player alone, voicing both characters, when the count is odd', () => {
+    for (const n of [3, 5, 7]) {
+      const teams = pairTeams(ids(n), 2, rng);
+      expect(teams).toHaveLength((n + 1) / 2);
+      const solo = teams.filter((t) => t.members.length === 1);
+      expect(solo).toHaveLength(1);
+      expect(solo[0]!.members[0]!.role).toBe('both');
+    }
+  });
+
+  it('gives teams ids unique within the game', () => {
+    const ids1 = pairTeams(ids(4), 1, rng).map((t) => t.id);
+    const ids2 = pairTeams(ids(4), 2, rng).map((t) => t.id);
+    expect(new Set([...ids1, ...ids2]).size).toBe(4);
+  });
+});
+
+describe('buildPerformances', () => {
+  const recordings = ['p1', 'p2', 'p3'].map((p) => ({
+    playerId: p,
+    clipId: `c-${p}`,
+    url: `/${p}`,
+  }));
+
+  it('makes one performance per recording in classic mode', () => {
+    const perfs = buildPerformances(recordings, null, 2000, () => 0.3);
+    expect(perfs.map((p) => p.id).sort()).toEqual(['c-p1', 'c-p2', 'c-p3']);
+    expect(perfs.find((p) => p.id === 'c-p2')).toEqual({
+      id: 'c-p2',
+      playerIds: ['p2'],
+      parts: [{ playerId: 'p2', url: '/p2', role: null }],
+      durationMs: 2000,
+    });
+  });
+
+  it('makes one performance per team that recorded, keeping members who did not', () => {
+    const teams: Team[] = [
+      {
+        id: 't1',
+        members: [
+          { playerId: 'p1', role: 'A' },
+          { playerId: 'p4', role: 'B' },
+        ],
+      },
+      { id: 't2', members: [{ playerId: 'p5', role: 'both' }] },
+      {
+        id: 't3',
+        members: [
+          { playerId: 'p2', role: 'B' },
+          { playerId: 'p3', role: 'A' },
+        ],
+      },
+    ];
+    const perfs = buildPerformances(recordings, teams, 2000, () => 0.3);
+    expect(perfs.map((p) => p.id).sort()).toEqual(['t1', 't3']); // t2 recorded nothing
+    expect(perfs.find((p) => p.id === 't1')).toEqual({
+      id: 't1',
+      playerIds: ['p1', 'p4'],
+      parts: [{ playerId: 'p1', url: '/p1', role: 'A' }],
+      durationMs: 2000,
+    });
+    expect(perfs.find((p) => p.id === 't3')!.parts.map((p) => p.role)).toEqual(['B', 'A']);
   });
 });

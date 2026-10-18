@@ -20,6 +20,8 @@ export const toSoundRef = (s: LibrarySound): SoundRef => ({
   label: s.label,
   durationMs: s.durationMs,
   url: s.url,
+  tags: s.tags,
+  lines: s.lines,
 });
 
 export function createLibraryClient(baseUrl: string, timeoutMs = 5000): LibraryClient {

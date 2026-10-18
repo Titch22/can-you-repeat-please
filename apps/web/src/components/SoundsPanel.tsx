@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent } from '
 import {
   MAX_CUSTOM_SOUND_MS,
   MAX_CUSTOM_SOUNDS_PER_ROOM,
+  isDialogue,
   MAX_UPLOAD_BYTES,
   SoundLabelSchema,
   type RoomState,
@@ -53,8 +54,12 @@ export function SoundsPanel({
   const [filter, setFilter] = useState<SoundFilter>(NO_FILTER);
   // The "uploaded here" chip: works like a tag that only room uploads have.
   const [roomOnly, setRoomOnly] = useState(false);
-  const uploads = room.sounds.filter((s) => s.uploadedBy);
-  const all: (SoundRef & { tags?: string[] })[] = [...(library ?? []), ...uploads];
+  // Teams mode only plays dialogues (library sounds tagged "team" with their lines).
+  const teamsMode = room.settings.mode === 'teams';
+  const uploads = teamsMode ? [] : room.sounds.filter((s) => s.uploadedBy);
+  const all: SoundRef[] = teamsMode
+    ? (library ?? []).filter(isDialogue)
+    : [...(library ?? []), ...uploads];
   const tagFilterOn = filter.tags.length > 0 || roomOnly;
   const visible = all.filter((s) => {
     if (!matchesBasics(s, filter)) return false;
@@ -108,6 +113,7 @@ export function SoundsPanel({
             <Button
               variant="ghost"
               size="sm"
+              hidden={teamsMode}
               disabled={uploads.length === 0}
               onClick={() => setSelected(uploads.map((s) => s.id))}
             >
@@ -117,13 +123,20 @@ export function SoundsPanel({
         )
       }
     >
-      <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_ROOM - uploads.length} />
+      {teamsMode ? (
+        <p className="rounded-control border border-dashed border-line-strong bg-surface-sunken/40 p-3 text-sm text-muted">
+          Teams mode plays <b className="text-ink">dialogues</b>: library sounds tagged “team” whose
+          lines (who speaks when) are set. Room uploads aren’t used in this mode.
+        </p>
+      ) : (
+        <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_ROOM - uploads.length} />
+      )}
 
       <div className="mt-4">
         <SoundFilters
           value={filter}
           onChange={setFilter}
-          tags={tagCounts(library ?? [])}
+          tags={tagCounts(teamsMode ? all.map((s) => ({ tags: s.tags ?? [] })) : (library ?? []))}
           extraChips={
             uploads.length > 0
               ? [
@@ -171,8 +184,16 @@ export function SoundsPanel({
           />
         ))}
       </ul>
-      {library !== null && narrowed && visible.length === 0 && (
-        <p className="mt-2 text-sm text-muted">No sound matches these filters.</p>
+      {library !== null && teamsMode && all.length === 0 ? (
+        <p className="mt-2 text-sm text-muted">
+          No dialogue in the library yet. In /admin, tag a scene “team” and mark its lines.
+        </p>
+      ) : (
+        library !== null &&
+        narrowed &&
+        visible.length === 0 && (
+          <p className="mt-2 text-sm text-muted">No sound matches these filters.</p>
+        )
       )}
       {!amHost && <p className="mt-3 text-sm text-muted">The host picks which sounds are in.</p>}
     </Card>
@@ -231,6 +252,7 @@ function SoundTile({
         <span className="block truncate text-xs text-subtle">
           {(sound.durationMs / 1000).toFixed(1)}s
           {uploader ? ` · by ${uploader}` : sound.tags?.length ? ` · ${sound.tags.join(', ')}` : ''}
+          {sound.lines?.length ? ` · ${sound.lines.length} lines` : ''}
         </span>
       </span>
       {canDelete && (

@@ -9,6 +9,7 @@ import { RoomStatus } from '../RoomStatus';
 import { VoiceBar } from '../VoiceBar';
 import { Avatar, Badge, Button, Card, Page } from '../ui';
 import { SecondsLeft } from './bits';
+import { RoleBadge } from './teams';
 import {
   FinalResults,
   PlaybackPhase,
@@ -57,8 +58,7 @@ export function GameView({ room }: { room: RoomState }) {
   // Fetch and decode sounds ahead of their scheduled start.
   const toPreload = [
     room.reference?.url,
-    ...(room.playback?.items.map((i) => i.url) ?? []),
-    ...room.clips.map((c) => c.url),
+    ...room.performances.flatMap((p) => p.parts.map((part) => part.url)),
   ]
     .filter(Boolean)
     .join('|');
@@ -108,6 +108,8 @@ export function GameView({ room }: { room: RoomState }) {
 
 function Scoreboard({ room, meId }: { room: RoomState; meId: string | null }) {
   const peers = useVoice((s) => s.peers);
+  const roleOf = (id: string) =>
+    room.teams?.flatMap((t) => t.members).find((m) => m.playerId === id)?.role;
   const players = [...room.players].sort((a, b) => b.score - a.score);
   const done = (id: string) =>
     (room.phase === 'RECORDING' && room.submittedPlayerIds.includes(id)) ||
@@ -128,6 +130,7 @@ function Scoreboard({ room, meId }: { room: RoomState; meId: string | null }) {
               <span className="truncate font-semibold">{p.nickname}</span>
               {p.id === meId && <span className="text-sm text-muted">(you)</span>}
               {p.isSpectator && <Badge>watching</Badge>}
+              {roleOf(p.id) && <RoleBadge role={roleOf(p.id)!} />}
             </span>
             {done(p.id) && (
               <span className="animate-pop font-bold text-success" title="Done">

@@ -30,6 +30,9 @@
   --color-success: var(--color-emerald-400);
   --color-danger: var(--color-rose-400);
   --color-rec: var(--color-rose-500);
+  /* Teams mode: the two characters of a dialogue. */
+  --color-speaker-a: var(--color-sky-400);
+  --color-speaker-b: var(--color-fuchsia-400);
 
   --radius-control: 0.75rem;
   --radius-card: 1.25rem;

@@ -1,14 +1,24 @@
 import {
+  isDialogue,
   LIBRARY_ID_PREFIX,
   MAX_RECORDING_MS,
   MIN_PLAYERS,
+  MIN_PLAYERS_TEAMS,
+  type GameMode,
   type Phase,
   type PlaybackItem,
   type SoundRef,
 } from '@cyrp/shared';
 import { RoomError, type Room, type RoomManager } from '../rooms/RoomManager.js';
 import type { LibraryClient } from '../sounds/library.js';
-import { pickSounds, shuffle, tally, validateVote, type Rng } from './rules.js';
+import {
+  buildPerformances,
+  pairTeams,
+  pickSounds,
+  tally,
+  validateVote,
+  type Rng,
+} from './rules.js';
 import { clipUrl, type GameState } from './state.js';
 import type { Timing } from './timing.js';
 
@@ -50,9 +60,8 @@ export class GameRunner {
       const room = rooms.getOrThrow(code);
       rooms.requireHost(code, playerId);
       if (room.phase !== 'LOBBY' || this.starting.has(code)) throw new RoomError('WRONG_PHASE');
-      if (room.players.filter((p) => p.socketId !== null).length < MIN_PLAYERS) {
-        throw new RoomError('NOT_ENOUGH_PLAYERS');
-      }
+      const connected = room.players.filter((p) => p.socketId !== null).length;
+      if (connected < minPlayers(room.settings.mode)) throw new RoomError('NOT_ENOUGH_PLAYERS');
       return room;
     };
     canStart();
@@ -65,12 +74,18 @@ export class GameRunner {
     }
     // The room may have changed while the library answered.
     const room = canStart();
+    const mode = room.settings.mode;
+    if (mode === 'teams') {
+      pool = pool.filter(isDialogue);
+      if (pool.length === 0) throw new RoomError('NO_DIALOGUES');
+    }
     const sounds = pickSounds(pool, room.settings.rounds, this.rng);
     for (const p of room.players) {
       p.isSpectator = false;
       p.score = 0;
     }
     room.game = {
+      mode,
       sounds,
       round: 0,
       deadline: null,
@@ -78,7 +93,8 @@ export class GameRunner {
       recording: null,
       recordings: new Map(),
       uploading: new Set(),
-      clipOrder: [],
+      teams: null,
+      performances: [],
       playback: null,
       votes: new Map(),
       roundResults: null,
@@ -91,7 +107,11 @@ export class GameRunner {
     const g = room.game;
     if (!g || room.phase !== 'VOTING') throw new RoomError('WRONG_PHASE');
     this.requireParticipant(room, playerId);
-    validateVote(clipIds, g.clipOrder, g.recordings.get(playerId)?.clipId ?? null);
+    validateVote(
+      clipIds,
+      g.performances.map((p) => p.id),
+      g.performances.find((p) => p.playerIds.includes(playerId))?.id ?? null,
+    );
     g.votes.set(playerId, [...clipIds]);
     this.deps.rooms.changed(room);
     if (this.everyone(room, (id) => g.votes.has(id))) this.toRoundResults(room);
@@ -142,7 +162,7 @@ export class GameRunner {
   onPresenceChanged(room: Room) {
     const g = room.game;
     if (!g || room.phase === 'FINAL_RESULTS') return;
-    if (room.players.filter((p) => !p.isSpectator).length < MIN_PLAYERS) {
+    if (room.players.filter((p) => !p.isSpectator).length < minPlayers(g.mode)) {
       this.toFinal(room);
       return;
     }
@@ -167,7 +187,15 @@ export class GameRunner {
     g.recording = null;
     g.recordings = new Map();
     g.uploading = new Set();
-    g.clipOrder = [];
+    g.teams =
+      g.mode === 'teams'
+        ? pairTeams(
+            room.players.filter((p) => !p.isSpectator).map((p) => p.id),
+            g.round,
+            this.rng,
+          )
+        : null;
+    g.performances = [];
     g.playback = null;
     g.votes = new Map();
     g.roundResults = null;
@@ -219,20 +247,14 @@ export class GameRunner {
 
   private toPlayback(room: Room) {
     const g = this.game(room);
-    g.clipOrder = shuffle(
-      [...g.recordings.values()].map((r) => r.clipId),
-      this.rng,
-    );
     const clipMs = g.recording!.endsAt - g.recording!.startsAt;
-    const owner = new Map([...g.recordings.values()].map((r) => [r.clipId, r.playerId]));
+    g.performances = buildPerformances([...g.recordings.values()], g.teams, clipMs, this.rng);
     const ref = g.reference!;
     const items: PlaybackItem[] = [
-      { kind: 'reference', clipId: null, playerId: null, url: ref.url, durationMs: ref.durationMs },
-      ...g.clipOrder.map((id) => ({
-        kind: 'clip' as const,
-        clipId: id,
-        playerId: owner.get(id)!,
-        url: clipUrl(room.code, id),
+      { kind: 'reference', url: ref.url, durationMs: ref.durationMs },
+      ...g.performances.map((performance) => ({
+        kind: 'performance' as const,
+        performance,
         durationMs: clipMs,
       })),
     ];
@@ -257,10 +279,10 @@ export class GameRunner {
 
   private toRoundResults(room: Room) {
     const g = this.game(room);
-    const results = tally([...g.recordings.values()], g.clipOrder, g.votes.values());
+    const results = tally(g.performances, g.votes.values());
     for (const r of results) {
-      const player = room.players.find((p) => p.id === r.playerId);
-      if (player) player.score += r.votes;
+      for (const player of room.players)
+        if (r.playerIds.includes(player.id)) player.score += r.votes;
     }
     g.roundResults = results;
     this.enter(room, 'ROUND_RESULTS');
@@ -351,3 +373,5 @@ export class GameRunner {
     return [...fromLibrary, ...room.customSounds.filter((s) => ticked.has(s.id))];
   }
 }
+
+const minPlayers = (mode: GameMode) => (mode === 'teams' ? MIN_PLAYERS_TEAMS : MIN_PLAYERS);

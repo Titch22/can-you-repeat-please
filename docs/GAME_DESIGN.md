@@ -27,12 +27,13 @@
 
 ### Settings
 
-| Setting              | Values                                      | Default |
-| -------------------- | ------------------------------------------- | ------- |
-| Rounds               | 1–20                                        | 5       |
-| Sounds               | Checkbox per sound: library + lobby uploads | none    |
-| Extra recording time | 0–3s added to the sound's length            | 1s      |
-| Voting time          | 10–60s                                      | 20s     |
+| Setting              | Values                                         | Default |
+| -------------------- | ---------------------------------------------- | ------- |
+| Game mode            | Classic, Teams (see [Game modes](#game-modes)) | Classic |
+| Rounds               | 1–20                                           | 5       |
+| Sounds               | Checkbox per sound: library + lobby uploads    | none    |
+| Extra recording time | 0–3s added to the sound's length               | 1s      |
+| Voting time          | 10–60s                                         | 20s     |
 
 ### Custom sounds
 
@@ -53,6 +54,27 @@
 - Shortcuts: **All** and **None** tick or untick every sound **shown** (so "every _animal_ sound under 3s" is two clicks), **Only uploads** ticks exactly the room's uploads.
 - Nothing is ticked by default, uploads included: the host picks the sounds before starting. The whole tile is clickable.
 - The game picks one ticked sound per round. A sound isn't picked again until every ticked sound has been used, so a short selection still works for long games. The game can't start until at least one sound is ticked.
+
+## Game modes
+
+The host picks the mode in the lobby settings.
+
+### Classic
+
+Everyone imitates the same sound, every attempt is played back, and everyone votes (the rest of this document).
+
+### Teams
+
+Random pairs dub a short movie dialogue: each member of a pair voices one of its two characters, and the pairs compete.
+
+- **Dialogues** are library sounds tagged **team** whose lines are marked in `/admin`: for each line, who speaks (character **A** or **B**), from when to when. One file per scene; any number of lines (A, B, A…). Only dialogues are listed and played in this mode; room uploads aren't used.
+- **At least 3 players**, so there are always at least two teams to vote between.
+- **Teams change every round**: players are shuffled into pairs, and each member of a pair gets a random character. With an odd number of players, one player is alone and voices **both** characters. Late joiners watch until the next game.
+- **Listen:** the whole scene plays, with a timeline of its lines; each player's lines are outlined.
+- **Repeat:** everyone records at the same time, over the whole scene, as in Classic. A cue follows the scene: **YOUR LINE!** during your character's lines, your partner's name during theirs, and a countdown before your next line.
+- **Playback:** the original, then each team's **stitched** performance: during each line, the recording of whoever voices that character, at the original timing. The lines of a member who didn't record stay silent.
+- **Vote:** for other teams (not your own), up to 2 as in Classic. Each vote gives **a point to every member** of the team. The podium stays per player.
+- Each performance can be replayed and downloaded as a WAV of the stitched scene.
 
 ## Round flow
 

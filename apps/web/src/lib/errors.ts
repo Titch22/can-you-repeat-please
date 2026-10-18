@@ -18,6 +18,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   TOO_MANY_VOTES: 'You can only vote for 2 recordings.',
   NOT_ENOUGH_PLAYERS: 'You need at least 2 players to start.',
   NOT_ENOUGH_SOUNDS: 'Tick at least one sound to play with.',
+  NO_DIALOGUES:
+    'Teams mode needs at least one ticked dialogue (a sound tagged “team” with its lines).',
   LIBRARY_UNAVAILABLE: 'The sound library is unavailable right now. Try again in a moment.',
   SPECTATOR: 'You’re watching this game; you’ll play in the next one.',
 };

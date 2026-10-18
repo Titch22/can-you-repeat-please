@@ -1,32 +1,42 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { MAX_VOTES_PER_PLAYER, type Player, type RoomState } from '@cyrp/shared';
+import { MAX_VOTES_PER_PLAYER, type Performance, type Player, type RoomState } from '@cyrp/shared';
 import { useRecorder, type RecorderStatus } from '../../hooks/useRecorder';
 import { backToLobby, castVote } from '../../lib/actions';
-import { downloadUrl, playAt, replay } from '../../lib/audio';
+import {
+  downloadUrl,
+  playAt,
+  playSegmentsAt,
+  renderSegments,
+  replaySegments,
+  saveBlob,
+} from '../../lib/audio';
 import { useServerNow } from '../../lib/clock';
+import { lineAt, performanceSegments, speaks } from '../../lib/dialogue';
 import { errorMessage } from '../../lib/errors';
 import { Avatar, Button, ErrorText } from '../ui';
 import { DownloadButton, PlayButton, ProgressBar } from './bits';
+import {
+  DialogueTimeline,
+  myTeam,
+  namesOf,
+  playerOf,
+  PlayersLabel,
+  RoleBadge,
+  speakerText,
+} from './teams';
 
 interface PhaseProps {
   room: RoomState;
   me: Player | undefined;
 }
 
-/** The player who made a clip; they may have left the room since. */
-function authorOf(room: RoomState, playerId: string | null) {
-  return (
-    room.players.find((p) => p.id === playerId) ?? {
-      nickname: 'Someone who left',
-      color: '#64748b',
-    }
-  );
+/** "Bob - Screaming goat": the name a downloaded recording is saved under. */
+function recordingName(room: RoomState, performance: Performance) {
+  return `${namesOf(room, performance.playerIds)} - ${room.reference?.label ?? 'recording'}`;
 }
 
-/** "Bob - Screaming goat": the name a downloaded recording is saved under. */
-function recordingName(room: RoomState, author: { nickname: string }) {
-  return `${author.nickname} - ${room.reference?.label ?? 'recording'}`;
-}
+const segmentsOf = (room: RoomState, performance: Performance) =>
+  performanceSegments(performance, room.reference?.lines);
 
 /** Plays `url` for everyone at `startsAt` (server time) while mounted. */
 function useScheduledSound(url: string | undefined, startsAt: number | undefined) {
@@ -34,6 +44,20 @@ function useScheduledSound(url: string | undefined, startsAt: number | undefined
     if (!url || startsAt === undefined) return;
     return playAt(url, startsAt);
   }, [url, startsAt]);
+}
+
+/** Plays a performance (stitched in Teams mode) for everyone at `startsAt` while mounted. */
+function useScheduledPerformance(
+  room: RoomState,
+  performance: Performance | undefined,
+  startsAt: number | undefined,
+) {
+  const segments = performance ? segmentsOf(room, performance) : null;
+  const key = segments ? JSON.stringify(segments) : null;
+  useEffect(() => {
+    if (!key || startsAt === undefined) return;
+    return playSegmentsAt(JSON.parse(key), startsAt);
+  }, [key, startsAt]);
 }
 
 /** Centered stage content. */
@@ -56,7 +80,8 @@ const Headline = ({ children }: { children: ReactNode }) => (
   <p className="font-display text-4xl font-extrabold tracking-tight sm:text-5xl">{children}</p>
 );
 
-export function RoundIntro({ room }: PhaseProps) {
+export function RoundIntro({ room, me }: PhaseProps) {
+  const mine = myTeam(room, me?.id);
   return (
     <Stage>
       <Lead>Get ready…</Lead>
@@ -64,26 +89,75 @@ export function RoundIntro({ room }: PhaseProps) {
         Round {room.round}
         <span className="text-subtle">/{room.settings.rounds}</span>
       </p>
+      {mine && (
+        <p className="text-lg sm:text-xl" data-testid="my-team">
+          {mine.partner ? (
+            <>
+              You’re with <b>{playerOf(room, mine.partner.playerId).nickname}</b>: you voice{' '}
+              <RoleBadge role={mine.role} className="align-middle" />
+            </>
+          ) : (
+            <>
+              You’re alone this round: you voice <b>both characters</b>{' '}
+              <RoleBadge role="both" className="align-middle" />
+            </>
+          )}
+        </p>
+      )}
+      {room.teams && (
+        <ul className="flex w-full max-w-lg flex-col gap-2" data-testid="teams">
+          {room.teams.map((t) => (
+            <li
+              key={t.id}
+              className={`rounded-control border px-3 py-2 ${
+                t === mine?.team
+                  ? 'border-accent/60 bg-accent/10'
+                  : 'border-line bg-surface-raised/40'
+              }`}
+            >
+              <PlayersLabel room={room} playerIds={t.members.map((m) => m.playerId)} />
+            </li>
+          ))}
+        </ul>
+      )}
     </Stage>
   );
 }
 
-export function ReferencePhase({ room }: PhaseProps) {
+export function ReferencePhase({ room, me }: PhaseProps) {
   const ref = room.reference;
   useScheduledSound(ref?.url, ref?.startsAt);
   const now = useServerNow(100);
   if (!ref) return null;
   const playing = now >= ref.startsAt;
   const ended = now >= ref.startsAt + ref.durationMs;
+  const role = myTeam(room, me?.id)?.role;
   return (
     <Stage>
       <Lead className={ended ? 'font-semibold text-accent' : ''}>
         {ended ? 'Get ready to repeat it!' : playing ? 'Listen carefully!' : 'Here it comes…'}
       </Lead>
       <Headline>{ref.label}</Headline>
-      <div className="w-full max-w-sm">
-        <ProgressBar from={ref.startsAt} to={ref.startsAt + ref.durationMs} />
-      </div>
+      {room.teams && ref.lines?.length ? (
+        <div className="flex w-full max-w-lg flex-col gap-2">
+          <DialogueTimeline
+            lines={ref.lines}
+            durationMs={ref.durationMs}
+            startsAt={ref.startsAt}
+            myRole={role}
+          />
+          {role && (
+            <p className="text-sm text-muted">
+              Your lines are outlined: you voice{' '}
+              {role === 'both' ? 'both characters' : `character ${role}`}.
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="w-full max-w-sm">
+          <ProgressBar from={ref.startsAt} to={ref.startsAt + ref.durationMs} />
+        </div>
+      )}
     </Stage>
   );
 }
@@ -99,10 +173,49 @@ const RECORDER_TEXT: Record<RecorderStatus, string> = {
   error: 'Your recording could not be sent.',
 };
 
+/** Teams mode, while recording: is it my line now, my partner's, or a pause before mine? */
+function DialogueCue({ room, meId, now }: { room: RoomState; meId: string; now: number }) {
+  const rec = room.recording!;
+  const lines = room.reference?.lines ?? [];
+  const mine = myTeam(room, meId);
+  const { current, next } = lineAt(lines, now - rec.startsAt);
+  const partnerName = mine?.partner ? playerOf(room, mine.partner.playerId).nickname : null;
+
+  if (current && speaks(mine?.role, current.speaker)) {
+    return (
+      <p
+        className="inline-flex animate-pop items-center gap-3 rounded-full bg-rec/15 px-6 py-2.5 font-display text-3xl font-black text-rose-300 sm:text-4xl"
+        data-status="recording"
+      >
+        <span className="size-4 animate-pulse rounded-full bg-rec shadow-[0_0_12px_var(--color-rec)]" />
+        YOUR LINE!
+        <RoleBadge role={current.speaker} />
+      </p>
+    );
+  }
+  const upcomingMine = next && speaks(mine?.role, next.speaker);
+  const inSec = next ? Math.ceil((rec.startsAt + next.startMs - now) / 1000) : 0;
+  return (
+    <p className="font-display text-2xl font-bold sm:text-3xl" data-status="recording">
+      {current ? (
+        <span className={speakerText(current.speaker)}>
+          {partnerName ? `${partnerName}’s line…` : `Character ${current.speaker}’s line…`}
+        </span>
+      ) : upcomingMine ? (
+        <span className="text-ink">Your line in {inSec}…</span>
+      ) : next ? (
+        <span className="text-muted">Wait for it…</span>
+      ) : (
+        <span className="text-muted">That’s the end of the scene!</span>
+      )}
+    </p>
+  );
+}
+
 export function RecordingPhase({ room, me }: PhaseProps) {
   const canRecord = !!me && !me.isSpectator;
   const { status, level } = useRecorder(room, canRecord);
-  const now = useServerNow(100);
+  const now = useServerNow(50);
   const rec = room.recording;
   if (!rec) return null;
 
@@ -116,6 +229,8 @@ export function RecordingPhase({ room, me }: PhaseProps) {
 
   const countdown = Math.ceil((rec.startsAt - now) / 1000);
   const timesUp = now >= rec.endsAt;
+  const lines = room.teams ? room.reference?.lines : undefined;
+  const mine = myTeam(room, me.id);
   return (
     <Stage testId="recorder">
       <Lead className="text-sm sm:text-base">Everyone is muted while recording.</Lead>
@@ -129,6 +244,8 @@ export function RecordingPhase({ room, me }: PhaseProps) {
         >
           {countdown}
         </p>
+      ) : status === 'recording' && lines?.length ? (
+        <DialogueCue room={room} meId={me.id} now={now} />
       ) : status === 'recording' ? (
         <p
           className="inline-flex items-center gap-3 rounded-full bg-rec/15 px-5 py-2 font-display text-2xl font-extrabold text-rose-300 sm:text-3xl"
@@ -147,6 +264,16 @@ export function RecordingPhase({ room, me }: PhaseProps) {
           {RECORDER_TEXT[status]}
         </p>
       )}
+      {lines?.length && (status === 'countdown' || status === 'recording') ? (
+        <div className="w-full max-w-lg">
+          <DialogueTimeline
+            lines={lines}
+            durationMs={room.reference!.durationMs}
+            startsAt={rec.startsAt}
+            myRole={mine?.role}
+          />
+        </div>
+      ) : null}
       {status === 'recording' && (
         <div className="flex w-full max-w-sm flex-col gap-2">
           <ProgressBar from={rec.startsAt} to={rec.endsAt} color="bg-rec" />
@@ -174,25 +301,32 @@ export function RecordingPhase({ room, me }: PhaseProps) {
 export function PlaybackPhase({ room }: PhaseProps) {
   const pb = room.playback;
   const item = pb?.items[pb.index];
-  useScheduledSound(item?.url, pb?.startsAt);
+  useScheduledSound(item?.kind === 'reference' ? item.url : undefined, pb?.startsAt);
+  useScheduledPerformance(
+    room,
+    item?.kind === 'performance' ? item.performance : undefined,
+    pb?.startsAt,
+  );
   const now = useServerNow(100);
   if (!pb || !item) return null;
-  const attempt = pb.items.slice(0, pb.index + 1).filter((i) => i.kind === 'clip').length;
-  const total = pb.items.filter((i) => i.kind === 'clip').length;
+  const teams = !!room.teams;
+  const attempt = pb.items.slice(0, pb.index + 1).filter((i) => i.kind === 'performance').length;
+  const total = pb.items.filter((i) => i.kind === 'performance').length;
 
   // Pause before the first sound.
   if (pb.index === 0 && now < pb.startsAt) {
     return (
       <Stage testId="playback">
-        <Headline>Here come the attempts!</Headline>
+        <Headline>{teams ? 'Here come the teams!' : 'Here come the attempts!'}</Headline>
         <Lead>
-          The original first, then {total} {total === 1 ? 'attempt' : 'attempts'}.
+          The original first, then {total}{' '}
+          {teams ? (total === 1 ? 'team' : 'teams') : total === 1 ? 'attempt' : 'attempts'}.
         </Lead>
       </Stage>
     );
   }
 
-  const author = authorOf(room, item.playerId);
+  const lines = room.reference?.lines;
   return (
     <Stage testId="playback">
       {item.kind === 'reference' ? (
@@ -201,23 +335,70 @@ export function PlaybackPhase({ room }: PhaseProps) {
           <Headline>{room.reference?.label}</Headline>
         </div>
       ) : (
-        <div key={item.clipId} className="flex animate-enter flex-col items-center gap-3">
+        <div key={item.performance.id} className="flex animate-enter flex-col items-center gap-3">
           <Lead>
-            Attempt {attempt} of {total}
+            {teams ? 'Team' : 'Attempt'} {attempt} of {total}
           </Lead>
-          <p className="flex items-center gap-3 font-display text-4xl font-extrabold sm:text-5xl">
-            <Avatar player={author} size="lg" />
-            {author.nickname}
-          </p>
-          {item.clipId === room.myClipId && (
-            <p className="text-sm font-semibold text-accent">That’s you!</p>
+          <div className="font-display text-3xl font-extrabold sm:text-4xl">
+            <PlayersLabel room={room} playerIds={item.performance.playerIds} size="lg" />
+          </div>
+          {item.performance.id === room.myPerformanceId && (
+            <p className="text-sm font-semibold text-accent">
+              {item.performance.playerIds.length > 1 ? 'That’s your team!' : 'That’s you!'}
+            </p>
           )}
         </div>
       )}
-      <div className="w-full max-w-sm">
-        <ProgressBar from={pb.startsAt} to={pb.startsAt + item.durationMs} />
+      <div className="w-full max-w-lg">
+        {teams && lines?.length ? (
+          <DialogueTimeline
+            lines={lines}
+            durationMs={room.reference!.durationMs}
+            startsAt={pb.startsAt}
+          />
+        ) : (
+          <ProgressBar from={pb.startsAt} to={pb.startsAt + item.durationMs} />
+        )}
       </div>
     </Stage>
+  );
+}
+
+/** Replay and download buttons for one performance. */
+function PerformanceActions({ room, performance }: { room: RoomState; performance: Performance }) {
+  const [rendering, setRendering] = useState(false);
+  const label = `${namesOf(room, performance.playerIds)}’s ${
+    room.teams ? 'performance' : 'attempt'
+  }`;
+  const stitched = performance.parts.some((p) => p.role !== null);
+  const downloadStitched = async () => {
+    setRendering(true);
+    try {
+      const blob = await renderSegments(segmentsOf(room, performance), performance.durationMs);
+      saveBlob(blob, `${recordingName(room, performance)}.wav`);
+    } finally {
+      setRendering(false);
+    }
+  };
+  return (
+    <>
+      <PlayButton
+        label={`Replay ${label}`}
+        onClick={() => replaySegments(segmentsOf(room, performance))}
+      />
+      {stitched ? (
+        <DownloadButton
+          label={`Download ${label}`}
+          busy={rendering}
+          onClick={() => void downloadStitched()}
+        />
+      ) : (
+        <DownloadButton
+          href={downloadUrl(performance.parts[0]!.url, recordingName(room, performance))}
+          label={`Download ${label}`}
+        />
+      )}
+    </>
   );
 }
 
@@ -226,6 +407,7 @@ export function VotingPhase({ room, me }: PhaseProps) {
   const [error, setError] = useState<string | null>(null);
   const sent = me ? room.votedPlayerIds.includes(me.id) : false;
   const canVote = !!me && !me.isSpectator;
+  const teams = !!room.teams;
 
   const toggle = (id: string) =>
     setSelected((s) =>
@@ -241,17 +423,16 @@ export function VotingPhase({ room, me }: PhaseProps) {
     <div className="flex flex-col gap-4 pt-4">
       <Lead className="text-center">
         {canVote
-          ? `Pick your favorite attempts (up to ${MAX_VOTES_PER_PLAYER}).`
+          ? `Pick your favorite ${teams ? 'teams' : 'attempts'} (up to ${MAX_VOTES_PER_PLAYER}).`
           : 'The players are voting…'}
       </Lead>
-      <ul className="grid gap-2 sm:grid-cols-2" data-testid="vote-list">
-        {room.clips.map((clip, i) => {
-          const mine = clip.id === room.myClipId;
-          const author = authorOf(room, clip.playerId);
-          const isSelected = selected.includes(clip.id);
+      <ul className={`grid gap-2 ${teams ? '' : 'sm:grid-cols-2'}`} data-testid="vote-list">
+        {room.performances.map((perf, i) => {
+          const mine = perf.id === room.myPerformanceId;
+          const isSelected = selected.includes(perf.id);
           return (
             <li
-              key={clip.id}
+              key={perf.id}
               style={{ animationDelay: `${i * 40}ms` } as CSSProperties}
               className={`flex animate-enter items-center gap-2.5 rounded-control border px-3 py-2.5 transition ${
                 isSelected
@@ -259,26 +440,22 @@ export function VotingPhase({ room, me }: PhaseProps) {
                   : 'border-line bg-surface-raised/50'
               }`}
             >
-              <PlayButton
-                label={`Replay ${author.nickname}’s attempt`}
-                onClick={() => replay(clip.url)}
-              />
-              <Avatar player={author} />
-              <span className="min-w-0 flex-1 truncate font-semibold">
-                {author.nickname}
-                {mine && <span className="ml-2 text-sm font-normal text-muted">(you)</span>}
+              <PerformanceActions room={room} performance={perf} />
+              <span className="min-w-0 flex-1 font-semibold">
+                <PlayersLabel room={room} playerIds={perf.playerIds} />
+                {mine && (
+                  <span className="text-sm font-normal text-muted">
+                    {teams ? '(your team)' : '(you)'}
+                  </span>
+                )}
               </span>
-              <DownloadButton
-                href={downloadUrl(clip.url, recordingName(room, author))}
-                label={`Download ${author.nickname}’s attempt`}
-              />
               {canVote && !mine && (
                 <Button
                   key={isSelected ? 'on' : 'off'}
                   variant={isSelected ? 'primary' : 'secondary'}
                   size="sm"
                   className={isSelected ? 'animate-bump' : ''}
-                  onClick={() => toggle(clip.id)}
+                  onClick={() => toggle(perf.id)}
                   aria-pressed={isSelected}
                 >
                   {isSelected ? '★ Voted' : 'Vote'}
@@ -321,31 +498,23 @@ export function RoundResultsPhase({ room }: PhaseProps) {
       <Lead className="text-center">Votes this round</Lead>
       <ul className="flex flex-col gap-2" data-testid="round-results">
         {results.map((r, i) => {
-          const author = authorOf(room, r.playerId);
+          const perf = room.performances.find((p) => p.id === r.performanceId);
           const top = best > 0 && r.votes === best;
           return (
             <li
-              key={r.clipId}
+              key={r.performanceId}
               style={{ animationDelay: `${i * 60}ms` } as CSSProperties}
               className={`flex animate-enter items-center gap-2.5 rounded-control border px-3 py-2.5 ${
                 top ? 'border-accent/60 bg-accent/10' : 'border-line bg-surface-raised/50'
               }`}
             >
-              <PlayButton
-                label={`Replay ${author.nickname}’s attempt`}
-                onClick={() => replay(r.url)}
-              />
-              <Avatar player={author} />
-              <span className="flex-1 truncate font-semibold">
-                {top && <span aria-hidden>👑 </span>}
-                {author.nickname}
+              {perf && <PerformanceActions room={room} performance={perf} />}
+              <span className="flex min-w-0 flex-1 items-center gap-1 font-semibold">
+                {top && <span aria-hidden>👑</span>}
+                <PlayersLabel room={room} playerIds={r.playerIds} />
               </span>
-              <DownloadButton
-                href={downloadUrl(r.url, recordingName(room, author))}
-                label={`Download ${author.nickname}’s attempt`}
-              />
               <span
-                className={`rounded-full px-2.5 py-0.5 font-display font-bold tabular-nums ${
+                className={`shrink-0 rounded-full px-2.5 py-0.5 font-display font-bold tabular-nums ${
                   r.votes > 0 ? 'bg-accent text-accent-ink' : 'bg-surface-raised text-muted'
                 }`}
               >

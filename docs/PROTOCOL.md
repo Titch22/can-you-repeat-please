@@ -26,6 +26,7 @@ interface Player {
 }
 
 interface Settings {
+  mode: 'classic' | 'teams'; // see GAME_DESIGN.md, Game modes
   rounds: number; // 1–20
   selectedSoundIds: string[]; // sounds ticked for the game; none by default
   extraRecordMs: number; // 0–3000
@@ -38,15 +39,35 @@ interface SoundRef {
   durationMs: number;
   url: string;
   uploadedBy?: string;
+  tags?: string[]; // library sounds
+  lines?: DialogueLine[]; // library dialogues (the reference carries them in Teams mode)
 }
 
-interface PlaybackItem {
-  kind: 'reference' | 'clip';
-  clipId: string | null; // set for clips; what votes refer to
-  playerId: string | null; // author of the clip (null for the reference)
-  url: string;
+// Teams mode
+type Speaker = 'A' | 'B';
+type Role = Speaker | 'both'; // 'both': a player alone in their team
+interface DialogueLine {
+  startMs: number; // from the start of the file
+  endMs: number;
+  speaker: Speaker;
+}
+interface Team {
+  id: string;
+  members: { playerId: string; role: Role }[];
+}
+
+// What players vote for: a recording (classic), or a team's recordings (teams), stitched by
+// the reference's lines when played.
+interface Performance {
+  id: string; // the recording's id (classic) or the team's id (teams)
+  playerIds: string[]; // they all score its votes
+  parts: { playerId: string; url: string; role: Role | null }[]; // role null in classic
   durationMs: number;
 }
+
+type PlaybackItem =
+  | { kind: 'reference'; url: string; durationMs: number }
+  | { kind: 'performance'; performance: Performance; durationMs: number };
 
 interface RoomState {
   code: string;
@@ -61,11 +82,12 @@ interface RoomState {
   recording: { startsAt: number; endsAt: number } | null; // window after the 3-2-1
   submittedPlayerIds: string[]; // whose recording arrived this round
   playback: { items: PlaybackItem[]; index: number; startsAt: number } | null;
-  clips: { id: string; url: string; durationMs: number; playerId: string }[]; // playback order
-  myClipId: string | null; // per viewer
+  teams: Team[] | null; // Teams mode, from the round intro on
+  performances: Performance[]; // playback order; PLAYBACK, VOTING and ROUND_RESULTS only
+  myPerformanceId: string | null; // per viewer: theirs or their team's
   myVotes: string[]; // per viewer
   votedPlayerIds: string[]; // who has voted (not what they voted for)
-  roundResults: { clipId: string; playerId: string; votes: number; url: string }[] | null;
+  roundResults: { performanceId: string; playerIds: string[]; votes: number }[] | null;
 }
 ```
 
@@ -75,20 +97,20 @@ interface RoomState {
 
 Every event takes an ack callback that receives `{ ok: true, ... } | { ok: false, error: string }`.
 
-| Event                 | Payload                                     | Ack                                | Who                                                    |
-| --------------------- | ------------------------------------------- | ---------------------------------- | ------------------------------------------------------ |
-| `room:create`         | `{ nickname, color }`                       | `{ code, playerId, sessionToken }` | anyone                                                 |
-| `room:join`           | `{ code, nickname, color }`                 | `{ playerId, sessionToken }`       | anyone                                                 |
-| `room:resume`         | `{ code, sessionToken }`                    | `{ playerId }`                     | a player reconnecting                                  |
-| `room:leave`          | `{}`                                        |                                    | player                                                 |
-| `room:updateSettings` | `Partial<Settings>`                         |                                    | host, lobby only                                       |
-| `room:kick`           | `{ playerId }`                              |                                    | host                                                   |
-| `room:deleteSound`    | `{ soundId }`                               |                                    | the uploader or the host, lobby only                   |
-| `game:start`          | `{}`                                        |                                    | host, lobby only                                       |
-| `game:vote`           | `{ clipIds: string[] }` (0–2, not your own) |                                    | player, VOTING only; can be re-sent to change the vote |
-| `game:backToLobby`    | `{}`                                        |                                    | host, FINAL_RESULTS only                               |
-| `debug:setVoiceMuted` | `{ muted: boolean }`                        |                                    | host; dev builds only (`NODE_ENV !== 'production'`)    |
-| `time:sync`           | `{ clientTime }`                            | `{ clientTime, serverTime }`       | anyone                                                 |
+| Event                 | Payload                                                      | Ack                                | Who                                                    |
+| --------------------- | ------------------------------------------------------------ | ---------------------------------- | ------------------------------------------------------ |
+| `room:create`         | `{ nickname, color }`                                        | `{ code, playerId, sessionToken }` | anyone                                                 |
+| `room:join`           | `{ code, nickname, color }`                                  | `{ playerId, sessionToken }`       | anyone                                                 |
+| `room:resume`         | `{ code, sessionToken }`                                     | `{ playerId }`                     | a player reconnecting                                  |
+| `room:leave`          | `{}`                                                         |                                    | player                                                 |
+| `room:updateSettings` | `Partial<Settings>`                                          |                                    | host, lobby only                                       |
+| `room:kick`           | `{ playerId }`                                               |                                    | host                                                   |
+| `room:deleteSound`    | `{ soundId }`                                                |                                    | the uploader or the host, lobby only                   |
+| `game:start`          | `{}`                                                         |                                    | host, lobby only                                       |
+| `game:vote`           | `{ clipIds: string[] }` (performance ids, 0–2, not your own) |                                    | player, VOTING only; can be re-sent to change the vote |
+| `game:backToLobby`    | `{}`                                                         |                                    | host, FINAL_RESULTS only                               |
+| `debug:setVoiceMuted` | `{ muted: boolean }`                                         |                                    | host; dev builds only (`NODE_ENV !== 'production'`)    |
+| `time:sync`           | `{ clientTime }`                                             | `{ clientTime, serverTime }`       | anyone                                                 |
 
 ### Server → client
 
@@ -114,7 +136,7 @@ Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessi
 
 ### Error codes
 
-`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `SOUND_TOO_LONG`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `LIBRARY_UNAVAILABLE` (the sounds service didn't answer when the game started), `SPECTATOR`.
+`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `SOUND_TOO_LONG`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `LIBRARY_UNAVAILABLE` (the sounds service didn't answer when the game started), `NO_DIALOGUES` (Teams mode without a ticked dialogue), `SPECTATOR`.
 
 HTTP errors use the same codes in `{ ok: false, error }`, with status 401 (no seat), 409 (wrong phase, already submitted), 403 (spectator), 413 (too large) or 415 (format).
 
@@ -128,19 +150,20 @@ interface LibrarySound {
   label: string;
   durationMs: number;
   tags: string[]; // lowercase: letters, digits, spaces, dashes; 24 chars max
+  lines: DialogueLine[]; // Teams mode dialogues (tag "team"); [] for other sounds
   url: string; // `${SOUNDS_PUBLIC_URL}/files/<sha256>.<ext>`
 }
 ```
 
-| Method   | Route                                 | Body                | Response             | Notes                                                                                                            |
-| -------- | ------------------------------------- | ------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/health`                             |                     | `{ ok, sounds }`     |                                                                                                                  |
-| `GET`    | `/v1/sounds?tag=&minMs=&maxMs=&q=`    |                     | `LibrarySound[]`     | All filters optional. `tag` repeats (or comma-separated): sounds having **any** of them. Cached 15s              |
-| `GET`    | `/v1/sounds/:id`                      |                     | `LibrarySound`       |                                                                                                                  |
-| `POST`   | `/v1/sounds/lookup`                   | `{ ids: string[] }` | `LibrarySound[]`     | Read-only batch lookup (the game server resolves a selection with it). Unknown ids are left out                  |
-| `GET`    | `/v1/tags`                            |                     | `{ name, count }[]`  | Cached 15s                                                                                                       |
-| `GET`    | `/files/<sha256>.<ext>`               |                     | audio bytes          | Named after the content hash, so never changes: `Cache-Control: public, max-age=31536000, immutable`             |
-| `GET`    | `/v1/admin`                           |                     | `{ ok: true }`       | **Admin.** Checks a token                                                                                        |
-| `POST`   | `/v1/sounds?label=<name>&tag=a&tag=b` | raw audio bytes     | `LibrarySound` (201) | **Admin.** Same rules as room uploads (≤2 MB, 0.2–20s). 409 `DUPLICATE` with `{ sound }` if the same file exists |
-| `PATCH`  | `/v1/sounds/:id`                      | `{ label?, tags? }` | `LibrarySound`       | **Admin.** `tags` replaces the whole list                                                                        |
-| `DELETE` | `/v1/sounds/:id`                      |                     | `{ ok: true }`       | **Admin.** The file is deleted once no sound uses it. Games already started keep working until they end          |
+| Method   | Route                                 | Body                        | Response             | Notes                                                                                                                     |
+| -------- | ------------------------------------- | --------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/health`                             |                             | `{ ok, sounds }`     |                                                                                                                           |
+| `GET`    | `/v1/sounds?tag=&minMs=&maxMs=&q=`    |                             | `LibrarySound[]`     | All filters optional. `tag` repeats (or comma-separated): sounds having **any** of them. Cached 15s                       |
+| `GET`    | `/v1/sounds/:id`                      |                             | `LibrarySound`       |                                                                                                                           |
+| `POST`   | `/v1/sounds/lookup`                   | `{ ids: string[] }`         | `LibrarySound[]`     | Read-only batch lookup (the game server resolves a selection with it). Unknown ids are left out                           |
+| `GET`    | `/v1/tags`                            |                             | `{ name, count }[]`  | Cached 15s                                                                                                                |
+| `GET`    | `/files/<sha256>.<ext>`               |                             | audio bytes          | Named after the content hash, so never changes: `Cache-Control: public, max-age=31536000, immutable`                      |
+| `GET`    | `/v1/admin`                           |                             | `{ ok: true }`       | **Admin.** Checks a token                                                                                                 |
+| `POST`   | `/v1/sounds?label=<name>&tag=a&tag=b` | raw audio bytes             | `LibrarySound` (201) | **Admin.** Same rules as room uploads (≤2 MB, 0.2–20s). 409 `DUPLICATE` with `{ sound }` if the same file exists          |
+| `PATCH`  | `/v1/sounds/:id`                      | `{ label?, tags?, lines? }` | `LibrarySound`       | **Admin.** `tags` and `lines` replace the whole list. Lines: in order, not overlapping, ≥0.3s each, ≤30, within the sound |
+| `DELETE` | `/v1/sounds/:id`                      |                             | `{ ok: true }`       | **Admin.** The file is deleted once no sound uses it. Games already started keep working until they end                   |

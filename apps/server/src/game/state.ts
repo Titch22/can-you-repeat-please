@@ -1,4 +1,11 @@
-import type { PlaybackItem, RoundResult, SoundRef } from '@cyrp/shared';
+import type {
+  GameMode,
+  Performance,
+  PlaybackItem,
+  RoundResult,
+  SoundRef,
+  Team,
+} from '@cyrp/shared';
 
 export interface Recording {
   playerId: string;
@@ -9,6 +16,8 @@ export interface Recording {
 
 /** Everything about the game in progress. Lives on the room; null in the lobby. */
 export interface GameState {
+  /** The room's mode when the game started. */
+  mode: GameMode;
   /** One sound per round, picked at start. */
   sounds: SoundRef[];
   round: number;
@@ -19,8 +28,10 @@ export interface GameState {
   recordings: Map<string, Recording>;
   /** Players whose upload is in flight (guards against double submissions). */
   uploading: Set<string>;
-  /** Clip ids in (shuffled) playback order. */
-  clipOrder: string[];
+  /** This round's teams (Teams mode); null in classic mode. */
+  teams: Team[] | null;
+  /** What gets played back and voted on, in (shuffled) playback order. */
+  performances: Performance[];
   playback: { items: PlaybackItem[]; index: number; startsAt: number } | null;
   /** Ballots by player id. */
   votes: Map<string, string[]>;

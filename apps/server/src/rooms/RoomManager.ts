@@ -12,7 +12,7 @@ import {
   type Settings,
   type SoundRef,
 } from '@cyrp/shared';
-import { clipUrl, type GameState } from '../game/state.js';
+import type { GameState } from '../game/state.js';
 
 export class RoomError extends Error {
   constructor(public readonly code: ErrorCode) {
@@ -260,8 +260,7 @@ export class RoomManager {
 
   private gameView(room: Room, viewerId: string) {
     const g = room.game;
-    const showClips = ['PLAYBACK', 'VOTING', 'ROUND_RESULTS'].includes(room.phase);
-    const clipMs = g?.recording ? g.recording.endsAt - g.recording.startsAt : 0;
+    const showPerformances = ['PLAYBACK', 'VOTING', 'ROUND_RESULTS'].includes(room.phase);
     return {
       deadline: g?.deadline ?? null,
       round: g?.round ?? 0,
@@ -269,16 +268,9 @@ export class RoomManager {
       recording: g?.recording ?? null,
       submittedPlayerIds: g ? [...g.recordings.keys()] : [],
       playback: g?.playback ?? null,
-      clips:
-        g && showClips
-          ? g.clipOrder.map((id) => ({
-              id,
-              url: clipUrl(room.code, id),
-              durationMs: clipMs,
-              playerId: [...g.recordings.values()].find((r) => r.clipId === id)!.playerId,
-            }))
-          : [],
-      myClipId: g?.recordings.get(viewerId)?.clipId ?? null,
+      teams: g?.teams ?? null,
+      performances: g && showPerformances ? g.performances : [],
+      myPerformanceId: g?.performances.find((p) => p.playerIds.includes(viewerId))?.id ?? null,
       myVotes: g?.votes.get(viewerId) ?? [],
       votedPlayerIds: g ? [...g.votes.keys()] : [],
       roundResults: g?.roundResults ?? null,

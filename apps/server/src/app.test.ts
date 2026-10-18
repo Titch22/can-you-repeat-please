@@ -312,11 +312,11 @@ describe('recordings over HTTP', () => {
     await new Promise((r) => setTimeout(r, Math.max(0, state.recording!.endsAt - Date.now() + 50)));
     const playback = nextState(alice, (s) => s.phase === 'PLAYBACK');
     expect((await upload(created.code, 1, joined.sessionToken, wav())).status).toBe(200);
-    const { clips, myClipId } = await playback;
-    expect(clips).toHaveLength(2);
-    expect(clips.map((c) => c.id)).toContain(myClipId);
+    const { performances, myPerformanceId } = await playback;
+    expect(performances).toHaveLength(2);
+    expect(performances.map((p) => p.id)).toContain(myPerformanceId);
 
-    const url = `${baseUrl}${clips[0]!.url}`;
+    const url = `${baseUrl}${performances[0]!.parts[0]!.url}`;
     expect((await fetch(url)).status).toBe(401);
     const res = await fetch(`${url}?t=${joined.sessionToken}`);
     expect(res.status).toBe(200);

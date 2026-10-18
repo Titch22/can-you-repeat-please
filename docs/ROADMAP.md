@@ -67,8 +67,14 @@ Each milestone should end with something you can play or demo.
 - [ ] Put a CDN (Cloudflare) in front of `sounds.<domain>`
 - [ ] Sound sets saved by the host ("my favourites") or per-tag quick picks
 
+## M7: Game modes
+
+- [x] Game mode setting (host): Classic / Teams
+- [x] Dialogue lines in the library (who speaks when), edited on a waveform in `/admin`
+- [x] Teams mode: random pairs and roles each round (solo player voices both), line cues while recording, stitched playback, votes per team, stitched WAV download
+- [ ] More modes (ideas: reverse the sound, speed-up, "telephone" chain)
+
 ## Later ideas
 
 - "Best of" clip reel to download at the end of a game
 - Audio similarity score as a bonus next to votes
-- Team mode
