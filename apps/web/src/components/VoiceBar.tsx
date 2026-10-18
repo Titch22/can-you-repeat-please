@@ -63,6 +63,7 @@ export function VoiceBar({
           onClick={() => setMicWanted(!micWanted)}
           aria-pressed={!micWanted}
           disabled={status !== 'connected'}
+          title="Mutes you in voice chat only: rounds still record your mic"
           icon={micWanted ? <MicIcon className="size-4" /> : <MicOffIcon className="size-4" />}
         >
           {micWanted ? 'Mute' : 'Unmute'}
@@ -82,9 +83,14 @@ export function VoiceBar({
           Could not reach the voice server. The game still works without voice.
         </p>
       )}
+      <p className="flex items-center gap-2 pl-1 text-xs text-subtle" data-testid="mute-hint">
+        <MicOffIcon className="size-4 shrink-0" />
+        Mute only applies to voice chat: during a round, your mic is still recorded whatever the
+        button says.
+      </p>
       {!compact && (
         <p className="flex items-center gap-2 pl-1 text-xs text-subtle">
-          <HeadphonesIcon className="size-4" />
+          <HeadphonesIcon className="size-4 shrink-0" />
           Headphones recommended, so the game sounds don’t leak into your mic.
           {micOn && <span className="sr-only">Your mic is live.</span>}
         </p>
