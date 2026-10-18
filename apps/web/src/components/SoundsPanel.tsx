@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent, type MouseEvent } from 'react';
 import {
   MAX_CUSTOM_SOUND_MS,
-  MAX_CUSTOM_SOUNDS_PER_PLAYER,
+  MAX_CUSTOM_SOUNDS_PER_ROOM,
   MAX_UPLOAD_BYTES,
   SoundLabelSchema,
   type RoomState,
@@ -11,7 +11,7 @@ import { deleteSound, updateSettings, uploadSound } from '../lib/actions';
 import { replay } from '../lib/audio';
 import { errorMessage } from '../lib/errors';
 import { PlayButton } from './game/bits';
-import { Button, Card, ErrorText, inputClass } from './ui';
+import { Button, Card, inputClass } from './ui';
 
 /**
  * The room's sounds: the default pack plus uploads, each with a checkbox deciding whether it
@@ -35,7 +35,6 @@ export function SoundsPanel({
   const isSelected = new Set(selectedIds);
   const selected = room.sounds.filter((s) => isSelected.has(s.id)).length;
   const uploads = room.sounds.filter((s) => s.uploadedBy);
-  const myUploads = uploads.filter((s) => s.uploadedBy === meId).length;
 
   const setSelected = (ids: string[]) => {
     setOptimistic({ base: serverKey, ids });
@@ -80,7 +79,7 @@ export function SoundsPanel({
         )
       }
     >
-      <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_PLAYER - myUploads} />
+      <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_ROOM - uploads.length} />
 
       <ul
         className="-mx-1 mt-4 grid gap-2 px-1 pb-1 sm:grid-cols-2 lg:min-h-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] lg:content-start lg:overflow-y-auto"
@@ -171,6 +170,17 @@ function SoundTile({
   );
 }
 
+/** Default sound name: the file name without extension, trimmed to the label limit. */
+const labelFromFile = (f: File) =>
+  f.name
+    .replace(/\.[^.]+$/, '')
+    .trim()
+    .slice(0, 40) || 'Sound';
+
+/**
+ * One file: name it, then "Add sound". Several files: uploaded right away, one after another,
+ * each named after its file.
+ */
 function UploadForm({ code, remaining }: { code: string; remaining: number }) {
   const input = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -182,25 +192,51 @@ function UploadForm({ code, remaining }: { code: string; remaining: number }) {
   };
   const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [errors, setErrors] = useState<string[]>([]);
 
   const pick = (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = ''; // allow picking the same file again
-    if (!f) return;
-    setError(null);
-    if (f.size > MAX_UPLOAD_BYTES) {
-      setError(errorMessage('FILE_TOO_LARGE'));
-      return;
+    const picked = [...(e.target.files ?? [])];
+    e.target.value = ''; // allow picking the same files again
+    if (picked.length === 0) return;
+    const tooBig = picked.filter((f) => f.size > MAX_UPLOAD_BYTES);
+    const ok = picked.filter((f) => f.size <= MAX_UPLOAD_BYTES);
+    const problems = tooBig.map((f) =>
+      picked.length === 1
+        ? errorMessage('FILE_TOO_LARGE')
+        : `${f.name}: ${errorMessage('FILE_TOO_LARGE')}`,
+    );
+    setErrors(problems);
+    if (ok.length === 1 && picked.length === 1) {
+      choose(ok[0]!);
+      setLabel(labelFromFile(ok[0]!));
+    } else if (ok.length > 0) {
+      void uploadAll(ok, problems);
     }
-    choose(f);
-    setLabel(f.name.replace(/\.[^.]+$/, '').slice(0, 40));
+  };
+
+  const uploadAll = async (files: File[], problems: string[]) => {
+    choose(null);
+    setBusy(true);
+    const failed = [...problems];
+    for (const [i, f] of files.entries()) {
+      setProgress({ done: i, total: files.length });
+      const result = await uploadSound(code, f, labelFromFile(f));
+      if (!result.ok) {
+        failed.push(`${f.name}: ${errorMessage(result.error)}`);
+        // The room is full: the remaining files would all fail the same way.
+        if (result.error === 'TOO_MANY_SOUNDS' || result.error === 'WRONG_PHASE') break;
+      }
+    }
+    setProgress(null);
+    setBusy(false);
+    setErrors(failed);
   };
 
   const submit = async () => {
     if (!file) return;
     setBusy(true);
-    setError(null);
+    setErrors([]);
     const sent = file;
     const result = await uploadSound(code, sent, label.trim());
     setBusy(false);
@@ -211,7 +247,7 @@ function UploadForm({ code, remaining }: { code: string; remaining: number }) {
         setLabel('');
       }
     } else {
-      setError(errorMessage(result.error));
+      setErrors([errorMessage(result.error)]);
     }
   };
 
@@ -222,6 +258,7 @@ function UploadForm({ code, remaining }: { code: string; remaining: number }) {
       <input
         ref={input}
         type="file"
+        multiple
         accept="audio/*,.mp3,.ogg,.wav,.webm,.m4a"
         className="hidden"
         onChange={pick}
@@ -246,19 +283,30 @@ function UploadForm({ code, remaining }: { code: string; remaining: number }) {
       ) : (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <p className="text-sm text-muted">
-            Bring your own sounds: {MAX_CUSTOM_SOUND_MS / 1000}s max,{' '}
-            {MAX_UPLOAD_BYTES / 1024 / 1024} MB max. They’re deleted when the lobby closes.
+            Bring your own sounds (pick several at once if you like): {MAX_CUSTOM_SOUND_MS / 1000}s
+            max, {MAX_UPLOAD_BYTES / 1024 / 1024} MB max each. They’re deleted when the lobby
+            closes.
           </p>
           <Button
             variant="secondary"
-            disabled={remaining <= 0}
+            disabled={remaining <= 0 || busy}
             onClick={() => input.current?.click()}
           >
-            {remaining > 0 ? 'Upload a sound' : 'Upload limit reached'}
+            {progress
+              ? `Uploading ${progress.done + 1} of ${progress.total}…`
+              : remaining > 0
+                ? 'Upload a sound'
+                : 'Upload limit reached'}
           </Button>
         </div>
       )}
-      <ErrorText>{error}</ErrorText>
+      {errors.length > 0 && (
+        <ul role="alert" className="flex flex-col gap-0.5 text-sm text-danger">
+          {errors.map((e, i) => (
+            <li key={i}>{e}</li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

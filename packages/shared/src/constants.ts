@@ -10,7 +10,8 @@ export const MAX_RECORDING_MS = 23_000;
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const MAX_CUSTOM_SOUND_MS = 20_000;
 export const MIN_CUSTOM_SOUND_MS = 200;
-export const MAX_CUSTOM_SOUNDS_PER_PLAYER = 5;
+/** Safety net against filling the disk; there is no per-player limit. */
+export const MAX_CUSTOM_SOUNDS_PER_ROOM = 200;
 /** How long after the recording window uploads are still accepted. */
 export const RECORDING_UPLOAD_GRACE_MS = 3_000;
 

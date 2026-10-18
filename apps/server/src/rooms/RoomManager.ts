@@ -1,7 +1,7 @@
 import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import {
   DEFAULT_SETTINGS,
-  MAX_CUSTOM_SOUNDS_PER_PLAYER,
+  MAX_CUSTOM_SOUNDS_PER_ROOM,
   MAX_PLAYERS,
   RECONNECT_GRACE_MS,
   ROOM_CODE_LENGTH,
@@ -182,15 +182,16 @@ export class RoomManager {
     return room;
   }
 
-  /** Throws unless `playerId` may upload one more sound now (lobby only, per-player cap). */
-  assertCanAddSound(room: Room, playerId: string) {
+  /** Throws unless one more sound may be uploaded now (lobby only, room-wide cap). */
+  assertCanAddSound(room: Room) {
     if (room.phase !== 'LOBBY') throw new RoomError('WRONG_PHASE');
-    const mine = room.customSounds.filter((s) => s.uploadedBy === playerId).length;
-    if (mine >= MAX_CUSTOM_SOUNDS_PER_PLAYER) throw new RoomError('TOO_MANY_SOUNDS');
+    if (room.customSounds.length >= MAX_CUSTOM_SOUNDS_PER_ROOM) {
+      throw new RoomError('TOO_MANY_SOUNDS');
+    }
   }
 
   addCustomSound(room: Room, sound: SoundRef & { uploadedBy: string }) {
-    this.assertCanAddSound(room, sound.uploadedBy);
+    this.assertCanAddSound(room);
     room.customSounds.push(sound);
     this.touch(room);
   }

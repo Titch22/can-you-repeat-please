@@ -407,10 +407,6 @@ describe('custom sounds over HTTP', () => {
         200,
       );
     }
-    expect(await error(await uploadSound(code, joined.sessionToken, pcmWav(0.5)))).toEqual([
-      409,
-      'TOO_MANY_SOUNDS',
-    ]);
 
     const deleted = nextState(alice, (s) => !s.sounds.some((x) => x.id === sound.id));
     expect(await bob.emitWithAck('room:deleteSound', { soundId: sound.id })).toEqual({ ok: true });

@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
-  MAX_CUSTOM_SOUNDS_PER_PLAYER,
+  MAX_CUSTOM_SOUNDS_PER_ROOM,
   MAX_PLAYERS,
   RECONNECT_GRACE_MS,
   ROOM_IDLE_TIMEOUT_MS,
@@ -142,24 +142,24 @@ describe('RoomManager custom sounds', () => {
     uploadedBy: by,
   });
 
-  it('lists the default pack, then uploads, and caps uploads per player', () => {
+  it('lists the default pack, then uploads, and caps uploads per room, not per player', () => {
     const def = { id: 'default:a', label: 'A', durationMs: 1000, url: '/sounds/default/a.mp3' };
     const rooms = new RoomManager({}, Date.now, [def]);
     const { room, player: host } = rooms.create('Alice', '#ff0000', 's');
-    for (let i = 0; i < MAX_CUSTOM_SOUNDS_PER_PLAYER; i++)
+    for (let i = 0; i < MAX_CUSTOM_SOUNDS_PER_ROOM; i++)
       rooms.addCustomSound(room, upload(`u${i}`, host.id));
-    expect(errorCode(() => rooms.assertCanAddSound(room, host.id))).toBe('TOO_MANY_SOUNDS');
+    expect(errorCode(() => rooms.assertCanAddSound(room))).toBe('TOO_MANY_SOUNDS');
     expect(rooms.toState(room, host.id).sounds.map((s) => s.id)).toEqual([
       'default:a',
-      ...Array.from({ length: MAX_CUSTOM_SOUNDS_PER_PLAYER }, (_, i) => `u${i}`),
+      ...Array.from({ length: MAX_CUSTOM_SOUNDS_PER_ROOM }, (_, i) => `u${i}`),
     ]);
   });
 
   it('only accepts uploads in the lobby', () => {
     const rooms = new RoomManager();
-    const { room, player } = rooms.create('Alice', '#ff0000', 's');
+    const { room } = rooms.create('Alice', '#ff0000', 's');
     room.phase = 'RECORDING';
-    expect(errorCode(() => rooms.assertCanAddSound(room, player.id))).toBe('WRONG_PHASE');
+    expect(errorCode(() => rooms.assertCanAddSound(room))).toBe('WRONG_PHASE');
   });
 
   it('lets the uploader or the host delete a sound, and forgets it in the selection', () => {

@@ -36,7 +36,7 @@
 
 ### Custom sounds
 
-- Any player can upload sounds in the lobby. Limits: **20 seconds or less** (measured by the server), **2 MB or less**, at most **5 per player**. Accepted formats: mp3, ogg, wav, webm, m4a. The uploader names the sound (default: the file name).
+- Any player can upload sounds in the lobby. Limits: **20 seconds or less** (measured by the server), **2 MB or less**, no limit per player (at most 200 per room, as a safety net). Accepted formats: mp3, ogg, wav, webm, m4a. Several files can be uploaded at once. For a single file, the uploader names the sound (default: the file name); several files are named after their file names.
 - Custom sounds belong to the lobby. They are **never stored long-term**: they live in the room's temporary folder and are **deleted when the lobby ends** (the last player leaves or the room times out), when deleted by their uploader or the host, and at every server restart.
 - They stay available for the next games of the same lobby.
 

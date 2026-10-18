@@ -68,7 +68,7 @@ export function audioRoutes(rooms: RoomManager, game: GameRunner, storage: Audio
     express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
     async (req, res) => {
       const { room, player } = res.locals as SessionLocals;
-      rooms.assertCanAddSound(room, player.id);
+      rooms.assertCanAddSound(room);
       const label = SoundLabelSchema.safeParse(req.query.label);
       if (!label.success) throw new RoomError('INVALID_PAYLOAD');
       const format = Buffer.isBuffer(req.body) ? sniffAudio(req.body) : null;
