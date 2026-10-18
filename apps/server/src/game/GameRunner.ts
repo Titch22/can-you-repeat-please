@@ -1,4 +1,5 @@
 import {
+  LIBRARY_ID_PREFIX,
   MAX_RECORDING_MS,
   MIN_PLAYERS,
   type Phase,
@@ -6,6 +7,7 @@ import {
   type SoundRef,
 } from '@cyrp/shared';
 import { RoomError, type Room, type RoomManager } from '../rooms/RoomManager.js';
+import type { LibraryClient } from '../sounds/library.js';
 import { pickSounds, shuffle, tally, validateVote, type Rng } from './rules.js';
 import { clipUrl, type GameState } from './state.js';
 import type { Timing } from './timing.js';
@@ -13,7 +15,7 @@ import type { Timing } from './timing.js';
 export interface GameRunnerDeps {
   rooms: RoomManager;
   timing: Timing;
-  defaultSounds: SoundRef[];
+  library: LibraryClient;
   setVoiceMuted(code: string, muted: boolean): Promise<void>;
   /** Deletes the game's recordings (files on disk and `room.files` entries). */
   discardRecordings(room: Room): void;
@@ -30,6 +32,8 @@ export class GameRunner {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
   /** Voice mute changes waiting for the new phase's deadline to be set (see enter()). */
   private pendingMute = new Map<string, boolean>();
+  /** Rooms whose start is waiting for the sound library. */
+  private starting = new Set<string>();
   private rng: Rng;
   private now: () => number;
 
@@ -40,15 +44,28 @@ export class GameRunner {
 
   // ── Player actions ──────────────────────────────────────────────────────────
 
-  start(code: string, playerId: string) {
+  async start(code: string, playerId: string) {
     const { rooms } = this.deps;
-    const room = rooms.getOrThrow(code);
-    rooms.requireHost(code, playerId);
-    if (room.phase !== 'LOBBY') throw new RoomError('WRONG_PHASE');
-    if (room.players.filter((p) => p.socketId !== null).length < MIN_PLAYERS) {
-      throw new RoomError('NOT_ENOUGH_PLAYERS');
+    const canStart = () => {
+      const room = rooms.getOrThrow(code);
+      rooms.requireHost(code, playerId);
+      if (room.phase !== 'LOBBY' || this.starting.has(code)) throw new RoomError('WRONG_PHASE');
+      if (room.players.filter((p) => p.socketId !== null).length < MIN_PLAYERS) {
+        throw new RoomError('NOT_ENOUGH_PLAYERS');
+      }
+      return room;
+    };
+    canStart();
+    this.starting.add(code);
+    let pool: SoundRef[];
+    try {
+      pool = await this.soundPool(rooms.getOrThrow(code));
+    } finally {
+      this.starting.delete(code);
     }
-    const sounds = pickSounds(this.soundPool(room), room.settings.rounds, this.rng);
+    // The room may have changed while the library answered.
+    const room = canStart();
+    const sounds = pickSounds(pool, room.settings.rounds, this.rng);
     for (const p of room.players) {
       p.isSpectator = false;
       p.score = 0;
@@ -323,9 +340,14 @@ export class GameRunner {
     if (player.isSpectator) throw new RoomError('SPECTATOR');
   }
 
-  /** The sounds of the room (default pack + uploads) the host ticked. */
-  private soundPool(room: Room): SoundRef[] {
-    const selected = new Set(room.settings.selectedSoundIds);
-    return [...this.deps.defaultSounds, ...room.customSounds].filter((s) => selected.has(s.id));
+  /** The sounds the host ticked: library sounds (resolved now) and the room's uploads. */
+  private async soundPool(room: Room): Promise<SoundRef[]> {
+    const selected = room.settings.selectedSoundIds;
+    const libraryIds = selected
+      .filter((id) => id.startsWith(LIBRARY_ID_PREFIX))
+      .map((id) => id.slice(LIBRARY_ID_PREFIX.length));
+    const fromLibrary = await this.deps.library.resolve(libraryIds);
+    const ticked = new Set(selected);
+    return [...fromLibrary, ...room.customSounds.filter((s) => ticked.has(s.id))];
   }
 }

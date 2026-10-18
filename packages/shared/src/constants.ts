@@ -12,6 +12,9 @@ export const MAX_CUSTOM_SOUND_MS = 20_000;
 export const MIN_CUSTOM_SOUND_MS = 200;
 /** Safety net against filling the disk; there is no per-player limit. */
 export const MAX_CUSTOM_SOUNDS_PER_ROOM = 200;
+/** Prefix of library sound ids inside a room's selection (`lib:2-hours-later`). */
+export const LIBRARY_ID_PREFIX = 'lib:';
+export const MAX_TAGS_PER_SOUND = 20;
 /** How long after the recording window uploads are still accepted. */
 export const RECORDING_UPLOAD_GRACE_MS = 3_000;
 

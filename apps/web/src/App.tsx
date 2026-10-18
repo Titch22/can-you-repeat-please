@@ -2,6 +2,7 @@ import { BrowserRouter, Route, Routes } from 'react-router';
 import { useSocketSync } from './hooks/useSocketSync';
 import { useVoiceConnection } from './hooks/useVoiceConnection';
 import { HomePage } from './pages/HomePage';
+import { AdminPage } from './pages/AdminPage';
 import { RoomPage } from './pages/RoomPage';
 
 export function App() {
@@ -12,6 +13,7 @@ export function App() {
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/r/:code" element={<RoomPage />} />
+        <Route path="/admin" element={<AdminPage />} />
         <Route path="*" element={<HomePage />} />
       </Routes>
     </BrowserRouter>

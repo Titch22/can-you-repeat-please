@@ -52,7 +52,7 @@ interface RoomState {
   code: string;
   players: Player[];
   settings: Settings;
-  sounds: SoundRef[]; // default pack, then uploads (which have uploadedBy)
+  sounds: SoundRef[]; // this room's uploads (uploadedBy set); library sounds come from the sounds API
   phase: Phase;
   voiceMuted: boolean; // voice chat muted by the game (recording)
   deadline: number | null; // end of the current phase, server epoch ms
@@ -111,10 +111,36 @@ Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessi
 | `POST` | `/api/rooms/:code/sounds?label=<name>`     | raw audio bytes            | `SoundRef`       | Lobby only; ≤2 MB, 0.2–20s (measured by the server), ≤200 per room (one file per request). Errors: 409 `TOO_MANY_SOUNDS` / `WRONG_PHASE`, 415 `UNSUPPORTED_FORMAT`, 422 `SOUND_TOO_LONG` |
 | `POST` | `/api/rooms/:code/rounds/:round/recording` | raw audio bytes (the blob) | `{ ok: true }`   | During RECORDING (until 3s after the window); ≤2 MB; one per player per round. Format sniffed from the bytes: webm, ogg, wav, mp4/m4a, mp3                                               |
 | `GET`  | `/api/rooms/:code/audio/:fileId`           |                            | audio bytes      | Recordings and custom sounds. `?download=<name>` sends it as an attachment named `<name>.<ext>`                                                                                          |
-| `GET`  | `/sounds/default/:file`                    |                            | audio bytes      | Static default pack, public                                                                                                                                                              |
 
 ### Error codes
 
-`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `SOUND_TOO_LONG`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `SPECTATOR`.
+`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `SOUND_TOO_LONG`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `LIBRARY_UNAVAILABLE` (the sounds service didn't answer when the game started), `SPECTATOR`.
 
 HTTP errors use the same codes in `{ ok: false, error }`, with status 401 (no seat), 409 (wrong phase, already submitted), 403 (spectator), 413 (too large) or 415 (format).
+
+## Sounds API (apps/sounds)
+
+The sound library service, on its own origin (`SOUNDS_PUBLIC_URL`, e.g. `https://sounds.example.com`; `/sounds-api` through the Vite proxy in development). Reads are public (CORS for the game origin); writes need `Authorization: Bearer <SOUNDS_ADMIN_TOKEN>`. Errors are `{ ok: false, error }` with `UNAUTHORIZED` (401), `NOT_FOUND` (404), `INVALID_PAYLOAD` (400), `FILE_TOO_LARGE` (413), `UNSUPPORTED_FORMAT` (415), `SOUND_TOO_LONG` (422) or `DUPLICATE` (409).
+
+```ts
+interface LibrarySound {
+  id: string; // "2-hours-later"; inside a room selection it is prefixed: "lib:2-hours-later"
+  label: string;
+  durationMs: number;
+  tags: string[]; // lowercase: letters, digits, spaces, dashes; 24 chars max
+  url: string; // `${SOUNDS_PUBLIC_URL}/files/<sha256>.<ext>`
+}
+```
+
+| Method   | Route                                 | Body                | Response             | Notes                                                                                                            |
+| -------- | ------------------------------------- | ------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/health`                             |                     | `{ ok, sounds }`     |                                                                                                                  |
+| `GET`    | `/v1/sounds?tag=&minMs=&maxMs=&q=`    |                     | `LibrarySound[]`     | All filters optional. `tag` repeats (or comma-separated): sounds having **any** of them. Cached 15s              |
+| `GET`    | `/v1/sounds/:id`                      |                     | `LibrarySound`       |                                                                                                                  |
+| `POST`   | `/v1/sounds/lookup`                   | `{ ids: string[] }` | `LibrarySound[]`     | Read-only batch lookup (the game server resolves a selection with it). Unknown ids are left out                  |
+| `GET`    | `/v1/tags`                            |                     | `{ name, count }[]`  | Cached 15s                                                                                                       |
+| `GET`    | `/files/<sha256>.<ext>`               |                     | audio bytes          | Named after the content hash, so never changes: `Cache-Control: public, max-age=31536000, immutable`             |
+| `GET`    | `/v1/admin`                           |                     | `{ ok: true }`       | **Admin.** Checks a token                                                                                        |
+| `POST`   | `/v1/sounds?label=<name>&tag=a&tag=b` | raw audio bytes     | `LibrarySound` (201) | **Admin.** Same rules as room uploads (≤2 MB, 0.2–20s). 409 `DUPLICATE` with `{ sound }` if the same file exists |
+| `PATCH`  | `/v1/sounds/:id`                      | `{ label?, tags? }` | `LibrarySound`       | **Admin.** `tags` replaces the whole list                                                                        |
+| `DELETE` | `/v1/sounds/:id`                      |                     | `{ ok: true }`       | **Admin.** The file is deleted once no sound uses it. Games already started keep working until they end          |

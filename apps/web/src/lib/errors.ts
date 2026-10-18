@@ -17,7 +17,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   CANNOT_VOTE_SELF: 'You can’t vote for yourself.',
   TOO_MANY_VOTES: 'You can only vote for 2 recordings.',
   NOT_ENOUGH_PLAYERS: 'You need at least 2 players to start.',
-  NOT_ENOUGH_SOUNDS: 'There are no sounds to play with. Upload some or pick the default pack.',
+  NOT_ENOUGH_SOUNDS: 'Tick at least one sound to play with.',
+  LIBRARY_UNAVAILABLE: 'The sound library is unavailable right now. Try again in a moment.',
   SPECTATOR: 'You’re watching this game; you’ll play in the next one.',
 };
 

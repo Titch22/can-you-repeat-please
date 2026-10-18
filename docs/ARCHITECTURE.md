@@ -15,6 +15,8 @@
        ┌─────────────────────────────────────────────────────────────────────────────┐
        │                         LiveKit SFU (voice chat)                            │
        └─────────────────────────────────────────────────────────────────────────────┘
+
+ Browser ──HTTP (list, play, admin)──► Sounds service (apps/sounds) ◄──lookup at game start── Game server
 ```
 
 Three channels, each with one job:
@@ -22,6 +24,8 @@ Three channels, each with one job:
 - **Socket.IO** carries the game: room membership, settings, phase changes, votes. The server is the only source of truth.
 - **HTTP** carries files: LiveKit tokens, recording and sound uploads, and audio downloads.
 - **LiveKit** carries live voice only. Game audio (reference sounds, recordings) never goes through LiveKit. Each client fetches and plays it locally.
+
+A fourth component, the **sounds service**, holds the curated sound library. Browsers fetch the list and the audio files from it directly; the game server only asks it for the selected sounds when a game starts (see [Sound library](#sound-library)).
 
 ## Server
 
@@ -61,7 +65,7 @@ LOBBY ─start─► ROUND_INTRO ─► REFERENCE ─► RECORDING ─► PLAYBA
 - On connect, the client pings the server a few times (`time:sync`) and keeps the median clock offset.
 - Countdowns and "start playing at T" use the server clock adjusted by that offset.
 - **Reference** and **playback** clips are scheduled at a server timestamp (`startsAt`). Clients preload the audio files when the phase starts and play them at `startsAt`. This keeps everyone hearing the same clip within a few tens of ms.
-- **Loudness:** every game sound (default pack, uploads, recordings) is normalized in the browser when decoded: a gated RMS (50 ms windows, -50 dBFS gate) sets a gain toward -20 dBFS, capped at 6x so near-silent recordings don't become loud noise, and a shared limiter catches the peaks. See `apps/web/src/lib/loudness.ts`.
+- **Loudness:** every game sound (library, uploads, recordings) is normalized in the browser when decoded: a gated RMS (50 ms windows, -50 dBFS gate) sets a gain toward -20 dBFS, capped at 6x so near-silent recordings don't become loud noise, and a shared limiter catches the peaks. See `apps/web/src/lib/loudness.ts`.
 - **Playback** has a sub-index (`playbackIndex`), advanced by the server, so all players hear the same clip at the same time.
 
 ### Phase timings
@@ -98,8 +102,7 @@ Fixed durations live in `apps/server/src/game/timing.ts`. `GAME_FAST=1` switches
 ## Audio storage and lifecycle
 
 ```
-sounds/default/            permanent, read-only, shipped with the repo: clips, manifest.json, CREDITS.md
-                           (CC0 / CC BY clips, plus public-domain tunes from scripts/generate-synth-sounds.mjs)
+data/sounds/               the sound library (dev; a Docker volume in production): library.db + files/
 tmp/rooms/<code>/          ephemeral, one dir per room
     snd-<uuid>.<ext>       custom lobby sounds
     rec-<round>-<pid>.ext  recordings
@@ -125,3 +128,22 @@ Self-hosted on a VPS with Docker Compose behind the host's nginx: see [DEPLOYMEN
 - **Game container** (`Dockerfile`): one Node process serves the built web app (with a fallback to `index.html` for client routes), the API and Socket.IO, so everything is same-origin. Temp audio lives on the container's disk, which is fine since it's ephemeral.
 - **LiveKit container**: signaling proxied by nginx (`wss://voice.…`), media on 7881/tcp and 7882/udp, public IP discovered via STUN (`use_external_ip`).
 - In production (`NODE_ENV=production`) the debug socket events are off.
+
+## Sound library
+
+```
+apps/sounds/src/
+  index.ts        bootstrap (the library starts empty: fill it from /admin or cli/import.ts)
+  library.ts      SQLite (node:sqlite) metadata + content-addressed files
+  app.ts          public read API, admin API (bearer token), static /files
+  importDir.ts    folder import (reads manifest.json ids and labels when present)
+  cli/import.ts   `pnpm --filter @cyrp/sounds import <dir> --tag <tag>`
+packages/audio/   format sniffing and duration measuring, shared with the game server
+```
+
+- **A separate service** with its own origin (`sounds.<domain>`), so its files can be cached hard (nginx `proxy_cache`, and a CDN like Cloudflare later) independently of the game.
+- **Storage:** `library.db` holds `sounds(id, label, duration_ms, file, mime, bytes, created_at)` and `sound_tags(sound_id, tag)`. Files are `files/<sha256>.<ext>`: a file's URL never changes (immutable caching), and uploading the same bytes twice is detected (`DUPLICATE`).
+- **Curated:** only the admin page writes (bearer token, compared in constant time). Room uploads never enter the library.
+- **Lobby:** the client fetches the whole list once (metadata only, small) and filters it locally, so tag chips and the length filter are instant. Library ids are prefixed `lib:` inside `settings.selectedSoundIds` so they can't clash with upload ids.
+- **Game start:** `GameRunner.start` resolves the ticked `lib:` ids with `POST /v1/sounds/lookup` (5s timeout), adds the ticked uploads, and keeps the result for the whole game. Sounds deleted from the library in the meantime are skipped; if the service is down, the start fails with `LIBRARY_UNAVAILABLE` and the lobby stays as it was.
+- **Playback:** reference sound URLs point at the sounds service; browsers fetch them with CORS (no session token: library files are public) and decode them like any other game sound.

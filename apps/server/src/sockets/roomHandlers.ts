@@ -136,7 +136,7 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
       'game:start',
       handler(Empty, () => {
         const { code, playerId } = membership();
-        deps.game.start(code, playerId);
+        return deps.game.start(code, playerId);
       }),
     );
 

@@ -4,6 +4,8 @@ import tailwindcss from '@tailwindcss/vite';
 
 // Game server to proxy to (override to run a second stack side by side).
 const server = process.env.API_TARGET ?? 'http://localhost:3000';
+// Sound library service (apps/sounds), reached as /sounds-api like in the dev SOUNDS_PUBLIC_URL.
+const sounds = process.env.SOUNDS_TARGET ?? 'http://localhost:3100';
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -15,7 +17,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': server,
-      '/sounds': server,
+      '/sounds-api': { target: sounds, rewrite: (path) => path.replace(/^\/sounds-api/, '') },
       '/socket.io': { target: server, ws: true },
     },
   },

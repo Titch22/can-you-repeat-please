@@ -1,6 +1,6 @@
 /**
- * Loudness normalization for game sounds (default pack, uploads, recordings), which vary a lot:
- * the default pack alone spans ~29 dB.
+ * Loudness normalization for game sounds (library sounds, uploads, recordings), which vary a lot:
+ * the old default pack alone spanned ~29 dB.
  *
  * Loudness here is a gated RMS: the signal is cut into 50 ms windows and only windows above
  * -50 dBFS count, so silence and pauses don't drag it down and very short clips still work.

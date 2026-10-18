@@ -1,32 +1,36 @@
 # Game server + built web app in one image. See docs/DEPLOYMENT.md.
+# The sound library has its own image: apps/sounds/Dockerfile.
 
 FROM node:24-slim AS build
 RUN corepack enable
 WORKDIR /app
 
-# Dependencies first, for layer caching.
+# Dependencies first, for layer caching. Every workspace package.json, so the lockfile matches.
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/server/package.json apps/server/
+COPY apps/sounds/package.json apps/sounds/
 COPY apps/web/package.json apps/web/
+COPY packages/audio/package.json packages/audio/
 COPY packages/shared/package.json packages/shared/
 RUN pnpm install --frozen-lockfile
 
 COPY packages packages
 COPY apps apps
+# Where browsers fetch library sounds from, baked into the web app.
+ARG VITE_SOUNDS_URL=/sounds-api
 RUN pnpm --filter @cyrp/server build \
- && pnpm --filter @cyrp/web build \
+ && VITE_SOUNDS_URL=$VITE_SOUNDS_URL pnpm --filter @cyrp/web build \
  && pnpm --filter @cyrp/server deploy --prod /out/server
 
 FROM node:24-slim
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Same layout as the repo: the server finds sounds/, apps/web/dist and tmp/ from its own path.
+# Same layout as the repo: the server finds apps/web/dist and tmp/ from its own path.
 COPY --from=build /out/server/package.json apps/server/package.json
 COPY --from=build /out/server/node_modules apps/server/node_modules
 COPY --from=build /app/apps/server/dist apps/server/dist
 COPY --from=build /app/apps/web/dist apps/web/dist
-COPY sounds/default sounds/default
 RUN mkdir tmp && chown node:node tmp
 
 USER node

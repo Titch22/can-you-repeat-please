@@ -1,0 +1,19 @@
+{
+  "name": "@cyrp/audio",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Server-side audio checks (format sniffing, duration), shared by the game and sounds servers.",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc -p .",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "music-metadata": "^12.2.2"
+  }
+}

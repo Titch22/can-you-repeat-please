@@ -5,6 +5,7 @@ export default defineConfig({
   format: 'esm',
   target: 'node20',
   clean: true,
-  // The shared package ships TypeScript source, so bundle it into the server output.
-  noExternal: ['@cyrp/shared'],
+  // The workspace packages ship TypeScript source, so bundle them into the server output.
+  // Their own dependencies (music-metadata…) stay external: list them in this package.json too.
+  noExternal: ['@cyrp/shared', '@cyrp/audio'],
 });

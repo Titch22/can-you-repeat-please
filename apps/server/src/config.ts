@@ -16,8 +16,9 @@ export const config = {
     apiKey: process.env.LIVEKIT_API_KEY ?? 'devkey',
     apiSecret: process.env.LIVEKIT_API_SECRET ?? 'secret',
   },
+  /** The sound library service (apps/sounds), as reached from this server. */
+  soundsUrl: process.env.SOUNDS_INTERNAL_URL ?? 'http://localhost:3100',
   paths: {
-    defaultSounds: path.join(repoRoot, 'sounds/default'),
     tmpRooms: path.join(repoRoot, 'tmp/rooms'),
     /** Built web app (`pnpm --filter @cyrp/web build`); served when present, i.e. in production. */
     webDist: path.join(repoRoot, 'apps/web/dist'),

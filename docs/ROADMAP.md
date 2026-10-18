@@ -30,7 +30,7 @@ Each milestone should end with something you can play or demo.
 
 ## M3: Core game loop (default sound pack)
 
-- [x] `sounds/default/`: 24 meme classics (CC0/CC BY clips + synthesized public-domain tunes), `manifest.json`, `CREDITS.md`
+- [x] `sounds/default/`: 24 meme classics (CC0/CC BY clips + synthesized public-domain tunes), `manifest.json`, `CREDITS.md` (removed in M6: sounds now live in the library)
 - [x] `GameRunner` + pure `rules.ts`, with unit tests (transitions, votes, scoring, leavers)
 - [x] GameRunner timers, deadlines, `time:sync`
 - [x] Reference phase: preload, then synced play at `startsAt`
@@ -57,9 +57,18 @@ Each milestone should end with something you can play or demo.
 - [x] Production setup: Dockerfile, compose stack (game + LiveKit) behind nginx, deployment guide
 - [x] Deploy on the VPS and play with real friends: https://game.cyrp.iamthesen.at/
 
+## M6: Sound library
+
+- [x] Sounds service (`apps/sounds`): SQLite + content-addressed files, public read API, admin API with a token, immutable caching
+- [x] Tags and duration on every sound; the repo's `sounds/default/` pack removed (the library is filled from `/admin`)
+- [x] Lobby picker on the library: search, length and tag filters; All / None act on the sounds shown
+- [x] `/admin` page: bulk upload with tags, rename, edit tags, delete
+- [x] Deployment: own container and volume, `sounds.<domain>` behind nginx with a file cache
+- [ ] Put a CDN (Cloudflare) in front of `sounds.<domain>`
+- [ ] Sound sets saved by the host ("my favourites") or per-tag quick picks
+
 ## Later ideas
 
 - "Best of" clip reel to download at the end of a game
-- Themed sound packs (animals, machines, memes)
 - Audio similarity score as a bonus next to votes
 - Team mode

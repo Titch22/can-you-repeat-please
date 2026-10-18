@@ -1,5 +1,11 @@
 import type { z } from 'zod';
-import type { PhaseSchema, SettingsSchema } from './schemas.js';
+import type {
+  LibrarySoundPatchSchema,
+  LibrarySoundSchema,
+  PhaseSchema,
+  SettingsSchema,
+  TagCountSchema,
+} from './schemas.js';
 
 export type Phase = z.infer<typeof PhaseSchema>;
 export type Settings = z.infer<typeof SettingsSchema>;
@@ -46,7 +52,7 @@ export interface RoomState {
   code: string;
   players: Player[];
   settings: Settings;
-  /** Every sound of the room: the default pack, then uploads (which have `uploadedBy`). */
+  /** The room's uploads (`uploadedBy` set). Library sounds come from the sounds service. */
   sounds: SoundRef[];
   phase: Phase;
   /** True while voice chat is muted by the game (recording phase). */
@@ -91,6 +97,21 @@ export type ErrorCode =
   | 'TOO_MANY_VOTES'
   | 'NOT_ENOUGH_PLAYERS'
   | 'NOT_ENOUGH_SOUNDS'
+  | 'LIBRARY_UNAVAILABLE'
   | 'SPECTATOR';
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode };
+
+export type LibrarySound = z.infer<typeof LibrarySoundSchema>;
+export type TagCount = z.infer<typeof TagCountSchema>;
+export type LibrarySoundPatch = z.infer<typeof LibrarySoundPatchSchema>;
+
+/** Errors of the sounds service (apps/sounds), as `{ ok: false, error }` bodies. */
+export type LibraryErrorCode =
+  | 'UNAUTHORIZED'
+  | 'NOT_FOUND'
+  | 'INVALID_PAYLOAD'
+  | 'FILE_TOO_LARGE'
+  | 'UNSUPPORTED_FORMAT'
+  | 'SOUND_TOO_LONG'
+  | 'DUPLICATE';

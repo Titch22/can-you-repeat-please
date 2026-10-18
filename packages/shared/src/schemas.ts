@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { MAX_VOTES_PER_PLAYER, ROOM_CODE_LENGTH } from './constants.js';
+import { MAX_TAGS_PER_SOUND, MAX_VOTES_PER_PLAYER, ROOM_CODE_LENGTH } from './constants.js';
 
 export const PhaseSchema = z.enum([
   'LOBBY',
@@ -22,8 +22,8 @@ export const RoomCodeSchema = z
 
 export const SettingsSchema = z.object({
   rounds: z.number().int().min(1).max(20),
-  /** Sounds the host ticked for the game (default pack or uploads). None by default. */
-  selectedSoundIds: z.array(z.string().max(100)).max(500),
+  /** Sounds the host ticked for the game (`lib:` library ids or uploads). None by default. */
+  selectedSoundIds: z.array(z.string().max(100)).max(2000),
   extraRecordMs: z.number().int().min(0).max(3000),
   votingMs: z.number().int().min(10_000).max(60_000),
 });
@@ -52,3 +52,31 @@ export const VotePayload = z.object({
 export const TimeSyncPayload = z.object({ clientTime: z.number() });
 export const SetVoiceMutedPayload = z.object({ muted: z.boolean() });
 export const SoundLabelSchema = z.string().trim().min(1).max(40);
+
+// Sound library (apps/sounds)
+
+/** A library tag: lowercase words, e.g. "meme", "animal", "movie quote". */
+export const TagSchema = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .regex(/^[a-z0-9][a-z0-9 -]{0,23}$/);
+export const TagListSchema = z.array(TagSchema).max(MAX_TAGS_PER_SOUND);
+
+export const LibrarySoundSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  durationMs: z.number().int().positive(),
+  tags: z.array(z.string()),
+  /** Absolute (production) or root-relative (dev proxy) URL of the audio file. */
+  url: z.string(),
+});
+export const TagCountSchema = z.object({ name: z.string(), count: z.number().int() });
+
+/** PATCH /v1/sounds/:id */
+export const LibrarySoundPatchSchema = z.object({
+  label: SoundLabelSchema.optional(),
+  tags: TagListSchema.optional(),
+});
+/** POST /v1/sounds/lookup */
+export const LibraryLookupSchema = z.object({ ids: z.array(z.string().max(100)).max(2000) });

@@ -38,14 +38,16 @@ Prerequisites: Node 20+ and pnpm 9+. You also need a LiveKit server for voice (f
 ```bash
 pnpm install
 cp apps/server/.env.example apps/server/.env
-pnpm dev                    # web on :5173, server on :3000
+pnpm dev                    # web on :5173, game server on :3000, sounds service on :3100
 ```
+
+The sounds service keeps its library in `data/sounds/` (git-ignored); it starts empty. Add sounds at http://localhost:5173/admin with the dev token `dev-admin`, or import a folder with `pnpm --filter @cyrp/sounds import <dir> --tag <tag>`.
 
 ### Scripts
 
 | Command                     | What it does                                                                                                    |
 | --------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `pnpm dev`                  | Runs the web and server dev servers together                                                                    |
+| `pnpm dev`                  | Runs the web, game server and sounds service dev servers together                                               |
 | `pnpm build`                | Builds all packages (server → `apps/server/dist`, web → `apps/web/dist`)                                        |
 | `pnpm typecheck`            | Type-checks every package                                                                                       |
 | `pnpm lint` / `pnpm format` | ESLint / Prettier                                                                                               |
@@ -57,9 +59,9 @@ pnpm dev                    # web on :5173, server on :3000
 ```
 apps/web/          React client
 apps/server/       Express + Socket.IO game server
+apps/sounds/       Sound library service (SQLite + files, tags, admin API)
 packages/shared/   Socket events, zod schemas, shared types
-sounds/default/    Default sound pack: 24 meme classics, manifest.json, CREDITS.md (licenses)
-scripts/           Dev scripts
+packages/audio/    Server-side audio checks (format, duration), used by both servers
 docs/              Design, architecture, protocol, roadmap
 ```
 

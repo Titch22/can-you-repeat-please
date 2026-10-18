@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MIN_PLAYERS, type RoomState } from '@cyrp/shared';
+import { LIBRARY_ID_PREFIX, MIN_PLAYERS, type RoomState } from '@cyrp/shared';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { startGame } from '../lib/actions';
 import { errorMessage } from '../lib/errors';
@@ -17,8 +17,12 @@ export function Lobby({ room }: { room: RoomState }) {
   const amHost = room.players.some((p) => p.id === meId && p.isHost);
   const [startError, setStartError] = useState<string | null>(null);
   const enoughPlayers = room.players.filter((p) => p.connected).length >= MIN_PLAYERS;
-  const selected = new Set(room.settings.selectedSoundIds);
-  const enoughSounds = room.sounds.some((s) => selected.has(s.id));
+  // A ticked library sound, or a ticked upload that still exists. The server has the final say
+  // (library sounds deleted since are skipped when the game starts).
+  const uploadIds = new Set(room.sounds.map((s) => s.id));
+  const enoughSounds = room.settings.selectedSoundIds.some(
+    (id) => id.startsWith(LIBRARY_ID_PREFIX) || uploadIds.has(id),
+  );
   useDocumentTitle(`${room.code} · Lobby`);
 
   const start = async () => {

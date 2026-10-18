@@ -142,15 +142,13 @@ describe('RoomManager custom sounds', () => {
     uploadedBy: by,
   });
 
-  it('lists the default pack, then uploads, and caps uploads per room, not per player', () => {
-    const def = { id: 'default:a', label: 'A', durationMs: 1000, url: '/sounds/default/a.mp3' };
-    const rooms = new RoomManager({}, Date.now, [def]);
+  it('lists the uploads, and caps uploads per room, not per player', () => {
+    const rooms = new RoomManager();
     const { room, player: host } = rooms.create('Alice', '#ff0000', 's');
     for (let i = 0; i < MAX_CUSTOM_SOUNDS_PER_ROOM; i++)
       rooms.addCustomSound(room, upload(`u${i}`, host.id));
     expect(errorCode(() => rooms.assertCanAddSound(room))).toBe('TOO_MANY_SOUNDS');
     expect(rooms.toState(room, host.id).sounds.map((s) => s.id)).toEqual([
-      'default:a',
       ...Array.from({ length: MAX_CUSTOM_SOUNDS_PER_ROOM }, (_, i) => `u${i}`),
     ]);
   });
@@ -169,13 +167,13 @@ describe('RoomManager custom sounds', () => {
     const { player: carol } = rooms.join(room.code, 'Carol', '#0000ff', 's3');
     rooms.addCustomSound(room, upload('bob-1', bob.id));
     rooms.addCustomSound(room, upload('bob-2', bob.id));
-    rooms.updateSettings(room.code, host.id, { selectedSoundIds: ['bob-1', 'default:x'] });
+    rooms.updateSettings(room.code, host.id, { selectedSoundIds: ['bob-1', 'lib:x'] });
 
     expect(errorCode(() => rooms.removeCustomSound(room.code, carol.id, 'bob-1'))).toBe('NOT_HOST');
     rooms.removeCustomSound(room.code, bob.id, 'bob-1');
     rooms.removeCustomSound(room.code, host.id, 'bob-2');
     expect(room.customSounds).toEqual([]);
-    expect(room.settings.selectedSoundIds).toEqual(['default:x']);
+    expect(room.settings.selectedSoundIds).toEqual(['lib:x']);
     expect(errorCode(() => rooms.removeCustomSound(room.code, host.id, 'nope'))).toBe(
       'INVALID_PAYLOAD',
     );

@@ -76,8 +76,6 @@ export class RoomManager {
   constructor(
     private hooks: RoomManagerHooks = {},
     private now: () => number = Date.now,
-    /** The server's default pack, listed to clients before each room's uploads. */
-    private defaultSounds: SoundRef[] = [],
   ) {}
 
   get size() {
@@ -253,7 +251,7 @@ export class RoomManager {
         score: p.score,
       })),
       settings: room.settings,
-      sounds: [...this.defaultSounds, ...room.customSounds],
+      sounds: room.customSounds,
       phase: room.phase,
       voiceMuted: room.voiceMuted,
       ...this.gameView(room, viewerId),

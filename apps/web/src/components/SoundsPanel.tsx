@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent } from 'react';
 import {
   MAX_CUSTOM_SOUND_MS,
   MAX_CUSTOM_SOUNDS_PER_ROOM,
@@ -10,12 +10,22 @@ import {
 import { deleteSound, updateSettings, uploadSound } from '../lib/actions';
 import { replay } from '../lib/audio';
 import { errorMessage } from '../lib/errors';
+import { useLibrary } from '../lib/library';
 import { PlayButton } from './game/bits';
+import {
+  isFiltered,
+  matchesBasics,
+  NO_FILTER,
+  SoundFilters,
+  tagCounts,
+  type SoundFilter,
+} from './SoundFilters';
 import { Button, Card, inputClass } from './ui';
 
 /**
- * The room's sounds: the default pack plus uploads, each with a checkbox deciding whether it
- * can come up in the game (host only). Anyone can upload; uploads vanish with the room.
+ * The sounds a game can use: the shared library (filtered by tags, length and name) plus this
+ * room's uploads, each with a checkbox deciding whether it can come up (host only). Anyone can
+ * upload; uploads vanish with the room.
  */
 export function SoundsPanel({
   room,
@@ -26,6 +36,12 @@ export function SoundsPanel({
   meId: string | null;
   amHost: boolean;
 }) {
+  const library = useLibrary((s) => s.sounds);
+  const libraryError = useLibrary((s) => s.error);
+  useEffect(() => {
+    void useLibrary.getState().load();
+  }, []);
+
   // Optimistic selection: the checkbox flips right away. It's only trusted while the server's
   // selection is still the one it was based on; the next server update replaces it.
   const serverKey = room.settings.selectedSoundIds.join('|');
@@ -33,8 +49,22 @@ export function SoundsPanel({
   const selectedIds =
     optimistic && optimistic.base === serverKey ? optimistic.ids : room.settings.selectedSoundIds;
   const isSelected = new Set(selectedIds);
-  const selected = room.sounds.filter((s) => isSelected.has(s.id)).length;
+
+  const [filter, setFilter] = useState<SoundFilter>(NO_FILTER);
+  // The "uploaded here" chip: works like a tag that only room uploads have.
+  const [roomOnly, setRoomOnly] = useState(false);
   const uploads = room.sounds.filter((s) => s.uploadedBy);
+  const all: (SoundRef & { tags?: string[] })[] = [...(library ?? []), ...uploads];
+  const tagFilterOn = filter.tags.length > 0 || roomOnly;
+  const visible = all.filter((s) => {
+    if (!matchesBasics(s, filter)) return false;
+    if (!tagFilterOn) return true;
+    if (s.uploadedBy) return roomOnly;
+    return (s.tags ?? []).some((t) => filter.tags.includes(t));
+  });
+  const visibleIds = new Set(visible.map((s) => s.id));
+  const narrowed = isFiltered(filter) || roomOnly;
+  const selected = all.filter((s) => isSelected.has(s.id)).length;
 
   const setSelected = (ids: string[]) => {
     setOptimistic({ base: serverKey, ids });
@@ -51,7 +81,7 @@ export function SoundsPanel({
       title="Sounds"
       subtitle={
         <span data-testid="sound-count">
-          {selected} of {room.sounds.length} in the game
+          {selected} of {all.length} in the game
         </span>
       }
       actions={
@@ -60,11 +90,19 @@ export function SoundsPanel({
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => setSelected(room.sounds.map((s) => s.id))}
+              title={narrowed ? 'Tick every sound shown' : undefined}
+              disabled={library === null && !libraryError}
+              onClick={() => setSelected([...new Set([...selectedIds, ...visibleIds])])}
             >
               All
             </Button>
-            <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+            <Button
+              variant="ghost"
+              size="sm"
+              title={narrowed ? 'Untick every sound shown' : undefined}
+              disabled={library === null && !libraryError}
+              onClick={() => setSelected(selectedIds.filter((id) => !visibleIds.has(id)))}
+            >
               None
             </Button>
             <Button
@@ -81,11 +119,47 @@ export function SoundsPanel({
     >
       <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_ROOM - uploads.length} />
 
+      <div className="mt-4">
+        <SoundFilters
+          value={filter}
+          onChange={setFilter}
+          tags={tagCounts(library ?? [])}
+          extraChips={
+            uploads.length > 0
+              ? [
+                  {
+                    key: 'room-uploads',
+                    label: 'uploaded here',
+                    count: uploads.length,
+                    on: roomOnly,
+                    toggle: () => setRoomOnly(!roomOnly),
+                  },
+                ]
+              : []
+          }
+        />
+      </div>
+      {libraryError ? (
+        <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-danger" role="alert">
+          The sound library is unreachable: only this room’s uploads are listed.
+          <Button variant="ghost" size="sm" onClick={() => void useLibrary.getState().load()}>
+            Retry
+          </Button>
+        </p>
+      ) : (
+        library === null && <p className="mt-3 animate-pulse text-sm text-muted">Loading sounds…</p>
+      )}
+      {narrowed && (
+        <p className="mt-2 text-xs text-subtle">
+          {visible.length} shown · All / None apply to the sounds shown
+        </p>
+      )}
+
       <ul
-        className="-mx-1 mt-4 grid gap-2 px-1 pb-1 sm:grid-cols-2 lg:min-h-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] lg:content-start lg:overflow-y-auto"
+        className="-mx-1 mt-3 grid gap-2 px-1 pb-1 sm:grid-cols-2 lg:min-h-0 lg:grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] lg:content-start lg:overflow-y-auto"
         data-testid="sound-grid"
       >
-        {room.sounds.map((sound) => (
+        {visible.map((sound) => (
           <SoundTile
             key={sound.id}
             sound={sound}
@@ -97,6 +171,9 @@ export function SoundsPanel({
           />
         ))}
       </ul>
+      {library !== null && narrowed && visible.length === 0 && (
+        <p className="mt-2 text-sm text-muted">No sound matches these filters.</p>
+      )}
       {!amHost && <p className="mt-3 text-sm text-muted">The host picks which sounds are in.</p>}
     </Card>
   );
@@ -110,7 +187,7 @@ function SoundTile({
   canDelete,
   onToggle,
 }: {
-  sound: SoundRef;
+  sound: SoundRef & { tags?: string[] };
   room: RoomState;
   checked: boolean;
   canToggle: boolean;
@@ -152,7 +229,8 @@ function SoundTile({
           {sound.label}
         </span>
         <span className="block truncate text-xs text-subtle">
-          {(sound.durationMs / 1000).toFixed(1)}s{uploader && ` · by ${uploader}`}
+          {(sound.durationMs / 1000).toFixed(1)}s
+          {uploader ? ` · by ${uploader}` : sound.tags?.length ? ` · ${sound.tags.join(', ')}` : ''}
         </span>
       </span>
       {canDelete && (

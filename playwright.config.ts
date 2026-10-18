@@ -5,6 +5,8 @@ export default defineConfig({
   // Each test runs several browsers doing WebRTC, recording and audio on this one machine; more
   // parallel workers starve them (voice detection, short game phases) and make tests flaky.
   workers: 2,
+  // Makes sure the sound library has something to play (it starts empty).
+  globalSetup: './e2e/global-setup.ts',
   use: {
     baseURL: 'http://localhost:5173',
   },
@@ -33,8 +35,15 @@ export default defineConfig({
       },
     },
   ],
-  // Two entries so each port is checked: a leftover web server alone must not pass for a full stack.
+  // One entry per port so each is checked: a leftover web server alone must not pass for a full stack.
   webServer: [
+    {
+      // The sound library (data/sounds, shared with `pnpm dev`).
+      command: 'pnpm --filter @cyrp/sounds dev',
+      url: 'http://localhost:3100/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
     {
       command: 'pnpm --filter @cyrp/server dev',
       url: 'http://localhost:3000/api/health',

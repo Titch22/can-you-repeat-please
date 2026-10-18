@@ -27,12 +27,12 @@
 
 ### Settings
 
-| Setting              | Values                                           | Default |
-| -------------------- | ------------------------------------------------ | ------- |
-| Rounds               | 1–20                                             | 5       |
-| Sounds               | Checkbox per sound: default pack + lobby uploads | none    |
-| Extra recording time | 0–3s added to the sound's length                 | 1s      |
-| Voting time          | 10–60s                                           | 20s     |
+| Setting              | Values                                      | Default |
+| -------------------- | ------------------------------------------- | ------- |
+| Rounds               | 1–20                                        | 5       |
+| Sounds               | Checkbox per sound: library + lobby uploads | none    |
+| Extra recording time | 0–3s added to the sound's length            | 1s      |
+| Voting time          | 10–60s                                      | 20s     |
 
 ### Custom sounds
 
@@ -40,9 +40,17 @@
 - Custom sounds belong to the lobby. They are **never stored long-term**: they live in the room's temporary folder and are **deleted when the lobby ends** (the last player leaves or the room times out), when deleted by their uploader or the host, and at every server restart.
 - They stay available for the next games of the same lobby.
 
+### Sound library
+
+- The game's own sounds live in a **curated library**, served by a separate sounds service (see [ARCHITECTURE.md](ARCHITECTURE.md#sound-library)). Each sound has a name, a duration and **tags** (e.g. _meme_, _animal_, _movie_).
+- Only an admin adds, renames, tags or deletes library sounds, on the `/admin` page (not linked from the game, unlocked by the admin token). Players can't add to the library: their uploads stay temporary (above).
+- The library starts empty: the admin fills it from the admin page.
+
 ### Choosing the sounds
 
-- The lobby lists every sound (the default pack, then uploads) in a grid with a preview button and a checkbox. Only the host can tick and untick; everyone sees the selection. Shortcuts: **All**, **None**, **Only uploads**.
+- The lobby lists every sound (the shared library, then the room's uploads) in a grid with a preview button and a checkbox. Only the host can tick and untick; everyone sees the selection.
+- Filters narrow the grid: a name search, a maximum length (2, 3, 5 or 10 seconds) and tag chips (a sound shows if it has **any** of the selected tags; "uploaded here" shows the room's uploads). Filters are per player and only change what is shown.
+- Shortcuts: **All** and **None** tick or untick every sound **shown** (so "every _animal_ sound under 3s" is two clicks), **Only uploads** ticks exactly the room's uploads.
 - Nothing is ticked by default, uploads included: the host picks the sounds before starting. The whole tile is clickable.
 - The game picks one ticked sound per round. A sound isn't picked again until every ticked sound has been used, so a short selection still works for long games. The game can't start until at least one sound is ticked.
 

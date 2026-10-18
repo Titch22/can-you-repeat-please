@@ -7,7 +7,7 @@ import {
   MIN_CUSTOM_SOUND_MS,
   SoundLabelSchema,
 } from '@cyrp/shared';
-import { measureDurationMs, sniffAudio } from '../audio/formats.js';
+import { measureDurationMs, sniffAudio } from '@cyrp/audio';
 import type { AudioStorage } from '../audio/storage.js';
 import type { GameRunner } from '../game/GameRunner.js';
 import { clipUrl } from '../game/state.js';

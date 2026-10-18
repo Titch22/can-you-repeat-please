@@ -4,7 +4,10 @@ name: cyrp
 
 services:
   game:
-    build: ..
+    build:
+      context: ..
+      args:
+        VITE_SOUNDS_URL: https://${SOUNDS_DOMAIN:?set SOUNDS_DOMAIN in deploy/.env}
     restart: unless-stopped
     environment:
       NODE_ENV: production
@@ -14,11 +17,30 @@ services:
       LIVEKIT_PUBLIC_URL: wss://${VOICE_DOMAIN:?set VOICE_DOMAIN in deploy/.env}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in deploy/.env}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in deploy/.env}
+      SOUNDS_INTERNAL_URL: http://sounds:3100
     ports:
       # Only nginx on this machine talks to it.
       - 127.0.0.1:3000:3000
     depends_on:
       - livekit
+      - sounds
+
+  # The sound library: SQLite + audio files in the sounds-data volume (back it up).
+  sounds:
+    build:
+      context: ..
+      dockerfile: apps/sounds/Dockerfile
+    restart: unless-stopped
+    environment:
+      PORT: 3100
+      CLIENT_ORIGIN: https://${GAME_DOMAIN}
+      SOUNDS_PUBLIC_URL: https://${SOUNDS_DOMAIN}
+      SOUNDS_ADMIN_TOKEN: ${SOUNDS_ADMIN_TOKEN:?set SOUNDS_ADMIN_TOKEN in deploy/.env}
+    volumes:
+      - sounds-data:/app/data
+    ports:
+      # Only nginx on this machine talks to it.
+      - 127.0.0.1:3100:3100
 
   livekit:
     image: livekit/livekit-server:v1.13.10
@@ -34,3 +56,6 @@ services:
       # Media: must be reachable from the internet (open them in the firewall).
       - 7881:7881/tcp
       - 7882:7882/udp
+
+volumes:
+  sounds-data:

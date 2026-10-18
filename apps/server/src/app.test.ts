@@ -23,13 +23,17 @@ const voice = {
   removeParticipant: vi.fn(async () => {}),
   closeRoom: vi.fn(async () => {}),
 } satisfies VoiceService;
-const sounds: SoundRef[] = [
-  { id: 'default:beep', label: 'Beep', durationMs: 1000, url: '/sounds/default/beep.wav' },
-];
+const library = {
+  resolve: vi.fn(async (ids: string[]): Promise<SoundRef[]> =>
+    ids
+      .filter((id) => id === 'beep')
+      .map(() => ({ id: 'lib:beep', label: 'Beep', durationMs: 1000, url: '/files/beep.wav' })),
+  ),
+};
 const { server, close } = createApp({
   storage,
   voice,
-  defaultSounds: sounds,
+  library,
   timing: FAST_TIMING,
   debug: true,
 });
@@ -280,7 +284,7 @@ describe('recordings over HTTP', () => {
     expect((await upload(created.code, 1, created.sessionToken, wav())).status).toBe(409);
 
     const recording = nextState(alice, (s) => s.phase === 'RECORDING');
-    await alice.emitWithAck('room:updateSettings', { selectedSoundIds: ['default:beep'] });
+    await alice.emitWithAck('room:updateSettings', { selectedSoundIds: ['lib:beep'] });
     expect(await alice.emitWithAck('game:start', {})).toEqual({ ok: true });
     const state = await recording;
 
@@ -355,7 +359,7 @@ describe('custom sounds over HTTP', () => {
       body: new Uint8Array(body),
     });
 
-  it('uploads, lists, plays, caps and deletes room sounds', async () => {
+  it('uploads, lists, plays and deletes room sounds', async () => {
     const alice = await connect();
     const created = await alice.emitWithAck('room:create', { nickname: 'Alice', color: '#ff0000' });
     if (!created.ok) throw new Error(created.error);
