@@ -4,10 +4,17 @@ import path from 'node:path';
 import type { AddressInfo } from 'node:net';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { io as ioClient, type Socket } from 'socket.io-client';
-import type { ClientToServerEvents, RoomState, ServerToClientEvents, SoundRef } from '@cyrp/shared';
+import {
+  RateLimiter,
+  type ClientToServerEvents,
+  type RoomState,
+  type ServerToClientEvents,
+  type SoundRef,
+} from '@cyrp/shared';
 import { FAST_TIMING } from './game/timing.js';
 import { createApp } from './app.js';
 import { createAudioStorage } from './audio/storage.js';
+import type { Limits } from './limits.js';
 import type { VoiceService } from './voice/livekit.js';
 
 type Client = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -30,13 +37,22 @@ const library = {
       .map(() => ({ id: 'lib:beep', label: 'Beep', durationMs: 1000, url: '/files/beep.wav' })),
   ),
 };
+// Loose limits: the tests open many rooms from one address. Tests swap in strict ones.
+const limits: Limits = {
+  enterRoom: new RateLimiter(1000, 1),
+  upload: new RateLimiter(1000, 1),
+  socketEvents: new RateLimiter(1000, 1),
+};
 const { server, close } = createApp({
   storage,
   voice,
   library,
   timing: FAST_TIMING,
   debug: true,
+  limits,
+  maxRooms: 1000, // the tests open many rooms
 });
+const withToken = (token: string) => ({ headers: { 'X-Session-Token': token } });
 let baseUrl: string;
 const clients: Client[] = [];
 
@@ -82,9 +98,16 @@ afterAll(() => {
 });
 
 describe('server', () => {
-  it('answers the health check', async () => {
+  it('answers the health check, with security headers', async () => {
     const res = await fetch(`${baseUrl}/api/health`);
     expect(await res.json()).toEqual({ ok: true });
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('x-frame-options')).toBe('DENY');
+    expect(res.headers.get('referrer-policy')).toBe('no-referrer');
+    expect(res.headers.get('x-powered-by')).toBeNull();
+    const csp = res.headers.get('content-security-policy')!;
+    expect(csp).toContain("script-src 'self'");
+    expect(csp).toContain("frame-ancestors 'none'");
   });
 
   it('answers time:sync and rejects invalid payloads', async () => {
@@ -116,6 +139,37 @@ describe('rooms over sockets', () => {
       ['Alice', true],
       ['Bob', false],
     ]);
+  });
+
+  it('gives one seat per connection', async () => {
+    const alice = await connect();
+    const created = await alice.emitWithAck('room:create', { nickname: 'Alice', color: '#ff0000' });
+    if (!created.ok) throw new Error(created.error);
+    expect(
+      await alice.emitWithAck('room:join', {
+        code: created.code,
+        nickname: 'Al',
+        color: '#ff0000',
+      }),
+    ).toEqual({ ok: false, error: 'INVALID_PAYLOAD' });
+  });
+
+  it('rate-limits creating and joining rooms per address', async () => {
+    const loose = limits.enterRoom;
+    limits.enterRoom = new RateLimiter(2, 60_000);
+    try {
+      const results = [];
+      for (let i = 0; i < 3; i++) {
+        const socket = await connect();
+        results.push(
+          await socket.emitWithAck('room:create', { nickname: `P${i}`, color: '#ff0000' }),
+        );
+      }
+      expect(results.map((r) => r.ok)).toEqual([true, true, false]);
+      expect(results[2]).toEqual({ ok: false, error: 'RATE_LIMITED' });
+    } finally {
+      limits.enterRoom = loose;
+    }
   });
 
   it('rejects settings changes from non-hosts', async () => {
@@ -318,14 +372,20 @@ describe('recordings over HTTP', () => {
 
     const url = `${baseUrl}${performances[0]!.parts[0]!.url}`;
     expect((await fetch(url)).status).toBe(401);
-    const res = await fetch(`${url}?t=${joined.sessionToken}`);
+    // The session token goes in a header, never in the URL (logs, history).
+    expect((await fetch(`${url}?t=${joined.sessionToken}`)).status).toBe(401);
+    const res = await fetch(url, withToken(joined.sessionToken));
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toMatch(/^audio\/wav/);
+    // Uploaded bytes can never be rendered as a page.
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('content-security-policy')).toBe("default-src 'none'; sandbox");
     expect((await res.arrayBuffer()).byteLength).toBe(2044);
 
     // ?download=<name> saves it as an attachment, named safely, with the right extension.
     const dl = await fetch(
-      `${url}?t=${joined.sessionToken}&download=${encodeURIComponent('Bob - Goat/../x')}`,
+      `${url}?download=${encodeURIComponent('Bob - Goat/../x')}`,
+      withToken(joined.sessionToken),
     );
     expect(dl.status).toBe(200);
     expect(dl.headers.get('content-disposition')).toBe('attachment; filename="Bob - Goat..x.wav"');
@@ -402,7 +462,9 @@ describe('custom sounds over HTTP', () => {
 
     // Served to room members only, then gone (file included) once deleted.
     expect((await fetch(`${baseUrl}${sound.url}`)).status).toBe(401);
-    expect((await fetch(`${baseUrl}${sound.url}?t=${created.sessionToken}`)).status).toBe(200);
+    expect((await fetch(`${baseUrl}${sound.url}`, withToken(created.sessionToken))).status).toBe(
+      200,
+    );
     const onDisk = () => fs.readdirSync(storage.roomDir(code)).filter((f) => f.startsWith('snd-'));
     expect(onDisk()).toHaveLength(1);
 
@@ -415,7 +477,9 @@ describe('custom sounds over HTTP', () => {
     const deleted = nextState(alice, (s) => !s.sounds.some((x) => x.id === sound.id));
     expect(await bob.emitWithAck('room:deleteSound', { soundId: sound.id })).toEqual({ ok: true });
     await deleted;
-    expect((await fetch(`${baseUrl}${sound.url}?t=${created.sessionToken}`)).status).toBe(404);
+    expect((await fetch(`${baseUrl}${sound.url}`, withToken(created.sessionToken))).status).toBe(
+      404,
+    );
     await waitFor(() => onDisk().length === 4);
   });
 });

@@ -1,3 +1,4 @@
+import { MAX_ROOMS } from '@cyrp/shared';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,8 +17,14 @@ export const config = {
     apiKey: process.env.LIVEKIT_API_KEY ?? 'devkey',
     apiSecret: process.env.LIVEKIT_API_SECRET ?? 'secret',
   },
+  /** Open rooms at once (default MAX_ROOMS); the e2e tests raise it. */
+  maxRooms: Number(process.env.MAX_ROOMS ?? MAX_ROOMS),
+  /** RATE_LIMITS=off disables per-client limits (e2e tests: every player is on localhost). */
+  rateLimits: process.env.RATE_LIMITS !== 'off',
   /** The sound library service (apps/sounds), as reached from this server. */
   soundsUrl: process.env.SOUNDS_INTERNAL_URL ?? 'http://localhost:3100',
+  /** The sound library as browsers reach it (allowed by the web app's CSP). */
+  soundsPublicUrl: process.env.SOUNDS_PUBLIC_URL,
   paths: {
     tmpRooms: path.join(repoRoot, 'tmp/rooms'),
     /** Built web app (`pnpm --filter @cyrp/web build`); served when present, i.e. in production. */

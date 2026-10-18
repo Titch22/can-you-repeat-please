@@ -6,6 +6,7 @@ import {
   LibraryLookupSchema,
   LibrarySoundPatchSchema,
   MAX_UPLOAD_BYTES,
+  RateLimiter,
   SoundLabelSchema,
   TagListSchema,
   type LibraryErrorCode,
@@ -17,7 +18,12 @@ export interface SoundsAppOptions {
   library: Library;
   adminToken: string;
   clientOrigin: string[];
+  /** Per-IP limits (tests pass their own). */
+  limits?: { failedAuth: RateLimiter; upload: RateLimiter };
 }
+
+/** Listings never return more than this many sounds. */
+export const MAX_LIST = 2000;
 
 const STATUS: Record<LibraryErrorCode, number> = {
   UNAUTHORIZED: 401,
@@ -27,6 +33,7 @@ const STATUS: Record<LibraryErrorCode, number> = {
   UNSUPPORTED_FORMAT: 415,
   SOUND_TOO_LONG: 422,
   DUPLICATE: 409,
+  RATE_LIMITED: 429,
 };
 
 /** `?tag=a&tag=b` or `?tag=a,b` → ['a', 'b'] */
@@ -43,6 +50,7 @@ const ListQuery = z.object({
   minMs: msParam,
   maxMs: msParam,
   q: z.string().trim().max(40).optional(),
+  limit: z.coerce.number().int().min(1).max(MAX_LIST).default(MAX_LIST),
 });
 
 const UploadQuery = z.object({
@@ -50,20 +58,44 @@ const UploadQuery = z.object({
   tag: listParam.pipe(TagListSchema),
 });
 
-export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsAppOptions) {
+export function createSoundsApp({
+  library,
+  adminToken,
+  clientOrigin,
+  limits = {
+    failedAuth: new RateLimiter(10, 60_000), // 10 wrong tokens, then 1 more per minute
+    upload: new RateLimiter(60, 1_000), // 60 at once, then 1 per second
+  },
+}: SoundsAppOptions) {
   const app = express();
   app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+  // Only JSON and audio are served here: nothing may run as a page or be framed.
+  app.use((_req, res, next) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; sandbox");
+    res.setHeader('Referrer-Policy', 'no-referrer');
+    res.setHeader('X-Frame-Options', 'DENY');
+    next();
+  });
   app.use(cors({ origin: clientOrigin, maxAge: 3600 }));
 
   const requireAdmin: RequestHandler = (req, _res, next) => {
+    // Guessing the token: after a few failures from one address, refuse everything for a while.
+    if (limits.failedAuth.exhausted(req.ip ?? '')) throw new LibraryError('RATE_LIMITED');
     const given = /^Bearer (.+)$/.exec(req.get('Authorization') ?? '')?.[1] ?? '';
     // Compare digests: same length whatever was sent, and constant-time.
     const digest = (s: string) => createHash('sha256').update(s).digest();
     if (!adminToken || !timingSafeEqual(digest(given), digest(adminToken))) {
+      limits.failedAuth.take(req.ip ?? '');
+      console.warn(`[admin] rejected token from ${req.ip} (${req.method} ${req.path})`);
       throw new LibraryError('UNAUTHORIZED');
     }
     next();
   };
+  /** Who changed what, in the container logs. */
+  const audit = (req: express.Request, what: string) =>
+    console.log(`[admin] ${req.ip} ${req.method} ${what}`);
   /** Short public caching for listings: admin edits show up within seconds. */
   const listCache: RequestHandler = (_req, res, next) => {
     res.setHeader('Cache-Control', 'public, max-age=15');
@@ -71,7 +103,7 @@ export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsApp
   };
 
   app.get('/health', (_req, res) => {
-    res.json({ ok: true, sounds: library.count() });
+    res.json({ ok: true });
   });
 
   // Audio files: named after their content hash, so they never change.
@@ -113,7 +145,7 @@ export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsApp
 
   /** Lets the admin page check a token. */
   app.get('/v1/admin', requireAdmin, (_req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, sounds: library.count() });
   });
 
   // Raw audio body; ?label=<name>&tag=a&tag=b. 409 DUPLICATE (with the existing sound) if the
@@ -121,6 +153,10 @@ export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsApp
   app.post(
     '/v1/sounds',
     requireAdmin,
+    (req, _res, next) => {
+      if (!limits.upload.take(req.ip ?? '')) throw new LibraryError('RATE_LIMITED');
+      next();
+    },
     express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
     async (req, res) => {
       const query = UploadQuery.safeParse(req.query);
@@ -138,6 +174,7 @@ export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsApp
         format,
         data: req.body,
       });
+      audit(req, `added ${sound.id} "${sound.label}" [${sound.tags.join(', ')}]`);
       res.status(201).json(sound);
     },
   );
@@ -148,15 +185,17 @@ export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsApp
     const sound = library.update(String(req.params.id), patch.data);
     if (!sound) throw new LibraryError('NOT_FOUND');
     if (sound === 'LINES_OUT_OF_RANGE') throw new LibraryError('INVALID_PAYLOAD');
+    audit(req, `edited ${sound.id} (${Object.keys(patch.data).join(', ')})`);
     res.json(sound);
   });
 
   app.delete('/v1/sounds/:id', requireAdmin, (req, res) => {
     if (!library.remove(String(req.params.id))) throw new LibraryError('NOT_FOUND');
+    audit(req, `deleted ${String(req.params.id)}`);
     res.json({ ok: true });
   });
 
-  const onError: ErrorRequestHandler = (err, _req, res, next) => {
+  const onError: ErrorRequestHandler = (err, _req, res, _next) => {
     if (err instanceof LibraryError) {
       res.status(STATUS[err.code]).json({ ok: false, error: err.code });
     } else if (err?.type === 'entity.too.large') {
@@ -164,7 +203,9 @@ export function createSoundsApp({ library, adminToken, clientOrigin }: SoundsApp
     } else if (err?.type === 'entity.parse.failed') {
       res.status(400).json({ ok: false, error: 'INVALID_PAYLOAD' });
     } else {
-      next(err);
+      // Never Express's HTML error page.
+      console.error('[http] unhandled error', err);
+      if (!res.headersSent) res.status(500).json({ ok: false, error: 'INTERNAL' });
     }
   };
   app.use(onError);

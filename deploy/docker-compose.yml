@@ -18,6 +18,8 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in deploy/.env}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in deploy/.env}
       SOUNDS_INTERNAL_URL: http://sounds:3100
+      # Allowed by the web app's Content Security Policy.
+      SOUNDS_PUBLIC_URL: https://${SOUNDS_DOMAIN}
     ports:
       # Only nginx on this machine talks to it.
       - 127.0.0.1:3000:3000

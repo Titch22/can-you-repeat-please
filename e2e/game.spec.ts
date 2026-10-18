@@ -77,7 +77,7 @@ test('three players play a 2-round game from lobby back to lobby', async ({ newP
       const [download] = await Promise.all([
         alice.waitForEvent('download'),
         alice
-          .getByRole('link', { name: /^Download .+’s attempt$/ })
+          .getByRole('button', { name: /^Download .+’s attempt$/ })
           .first()
           .click(),
       ]);

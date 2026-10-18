@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   MAX_CUSTOM_SOUNDS_PER_ROOM,
+  MAX_ROOMS,
   MAX_PLAYERS,
   RECONNECT_GRACE_MS,
   ROOM_IDLE_TIMEOUT_MS,
@@ -151,6 +152,12 @@ describe('RoomManager custom sounds', () => {
     expect(rooms.toState(room, host.id).sounds.map((s) => s.id)).toEqual([
       ...Array.from({ length: MAX_CUSTOM_SOUNDS_PER_ROOM }, (_, i) => `u${i}`),
     ]);
+  });
+
+  it('caps the number of open rooms', () => {
+    const rooms = new RoomManager();
+    for (let i = 0; i < MAX_ROOMS; i++) rooms.create(`P${i}`, '#ff0000', `s${i}`);
+    expect(errorCode(() => rooms.create('One more', '#ff0000', 'sx'))).toBe('SERVER_FULL');
   });
 
   it('only accepts uploads in the lobby', () => {

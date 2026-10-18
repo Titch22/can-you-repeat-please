@@ -12,6 +12,8 @@ export interface LibraryQuery {
   maxMs?: number;
   /** Case-insensitive search in labels. */
   q?: string;
+  /** At most this many sounds (in label order). */
+  limit?: number;
 }
 
 export interface NewSound {
@@ -111,7 +113,12 @@ export class Library {
       where.push("lower(s.label) LIKE ? ESCAPE '\\'");
       params.push(`%${query.q.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
     }
-    return this.select(where.length ? `WHERE ${where.join(' AND ')}` : '', params);
+    let clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    if (query.limit !== undefined) {
+      clause += ' ORDER BY s.label COLLATE NOCASE, s.id LIMIT ?';
+      params.push(query.limit);
+    }
+    return this.select(clause, params);
   }
 
   /** The sounds with these ids, in library order; unknown ids are skipped. */
@@ -213,7 +220,7 @@ export class Library {
            (SELECT json_group_array(json_array(start_ms, end_ms, speaker))
               FROM (SELECT * FROM sound_lines l WHERE l.sound_id = s.id ORDER BY idx)) AS lines
          FROM sounds s ${where}
-         ORDER BY s.label COLLATE NOCASE, s.id`,
+         ${where.includes('ORDER BY') ? '' : 'ORDER BY s.label COLLATE NOCASE, s.id'}`,
       )
       .all(...params) as unknown as Row[];
     return rows.map((r) => ({

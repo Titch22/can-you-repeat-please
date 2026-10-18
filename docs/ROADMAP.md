@@ -53,7 +53,8 @@ Each milestone should end with something you can play or demo.
 - [x] Mic picker and mic level indicator, mobile layout
 - ~~UI sound effects~~ (dropped by choice)
 - ~~Output device picker, Safari (mp4) support~~ (dropped)
-- [ ] Rate limiting, input sanitizing, error toasts
+- [x] Rate limiting, input sanitizing, security headers (see the security notes in ARCHITECTURE.md)
+- [ ] Error toasts
 - [x] Production setup: Dockerfile, compose stack (game + LiveKit) behind nginx, deployment guide
 - [x] Deploy on the VPS and play with real friends: https://game.cyrp.iamthesen.at/
 

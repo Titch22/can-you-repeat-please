@@ -1,6 +1,7 @@
 import type { Server, Socket } from 'socket.io';
 import { z } from 'zod';
 import {
+  clientAddress,
   KickPayload,
   RoomCreatePayload,
   RoomJoinPayload,
@@ -15,6 +16,7 @@ import {
   type ServerToClientEvents,
 } from '@cyrp/shared';
 import type { GameRunner } from '../game/GameRunner.js';
+import type { Limits } from '../limits.js';
 import { RoomError, type RoomManager } from '../rooms/RoomManager.js';
 
 export interface SocketData {
@@ -53,10 +55,25 @@ export interface HandlerDeps {
   setVoiceMuted(code: string, muted: boolean): Promise<void>;
   /** Registers debug-only events. */
   debug: boolean;
+  limits: Limits;
 }
 
 export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: HandlerDeps) {
   io.on('connection', (socket: GameSocket) => {
+    const address = clientAddress(
+      socket.handshake.headers['x-forwarded-for'],
+      socket.handshake.address,
+    );
+    // Flooding events: drop the connection (the client reconnects and resumes normally).
+    socket.use((_packet, next) => {
+      if (deps.limits.socketEvents.take(socket.id)) return next();
+      console.warn(`[socket] ${address} sends too many events, disconnecting`);
+      socket.disconnect(true);
+    });
+    const enterRoom = () => {
+      if (!deps.limits.enterRoom.take(address)) throw new RoomError('RATE_LIMITED');
+    };
+
     const membership = () => {
       const { code, playerId } = socket.data;
       if (!code || !playerId) throw new RoomError('ROOM_NOT_FOUND');
@@ -73,6 +90,7 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
     socket.on(
       'room:create',
       handler(RoomCreatePayload, ({ nickname, color }) => {
+        enterRoom();
         leaveCurrent();
         const { room, player } = rooms.create(nickname, color, socket.id);
         socket.data = { code: room.code, playerId: player.id };
@@ -83,7 +101,10 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
     socket.on(
       'room:join',
       handler(RoomJoinPayload, ({ code, nickname, color }) => {
-        if (socket.data.code !== code) leaveCurrent();
+        // One seat per connection: joining the room you're in would add a second player.
+        if (socket.data.code === code && rooms.get(code)) throw new RoomError('INVALID_PAYLOAD');
+        enterRoom();
+        leaveCurrent();
         const { player } = rooms.join(code, nickname, color, socket.id);
         socket.data = { code, playerId: player.id };
         return { playerId: player.id, sessionToken: player.sessionToken };
@@ -173,6 +194,7 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
     );
 
     socket.on('disconnect', () => {
+      deps.limits.socketEvents.forget(socket.id);
       const { code, playerId } = socket.data;
       if (code && playerId) rooms.disconnect(code, playerId, socket.id);
     });

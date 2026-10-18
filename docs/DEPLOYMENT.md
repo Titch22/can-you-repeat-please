@@ -137,7 +137,8 @@ Installs from before the library need, once:
 1. A DNS record for `sounds.<your domain>`.
 2. Two new lines in `deploy/.env`: `SOUNDS_DOMAIN=sounds.yourdomain.com` and `SOUNDS_ADMIN_TOKEN=$(openssl rand -hex 24)`. Compose refuses to start without them.
 3. The new nginx blocks from `deploy/nginx.conf.example`: the `proxy_cache_path` line at the top and the `sounds.example.com` server. Then `sudo nginx -t && sudo systemctl reload nginx` and `sudo certbot --nginx -d sounds.yourdomain.com`.
-4. `docker compose up -d --build`, as for any update. The web app is rebuilt with the library's URL baked in. The library starts empty: fill it from `/admin` (or with the import command above).
+4. `docker compose up -d --build`, as for any update.
+5. Optional, but recommended: copy the `limit_req_zone` lines and the `location /api/` and `location /v1/` blocks of the updated `deploy/nginx.conf.example` into your nginx site (rate limits, and an optional allowlist for admin writes). The web app is rebuilt with the library's URL baked in. The library starts empty: fill it from `/admin` (or with the import command above).
 
 ## Updating
 

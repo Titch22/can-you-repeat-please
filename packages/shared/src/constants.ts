@@ -1,4 +1,8 @@
 export const MAX_PLAYERS = 8;
+/** Open rooms on one server (default; MAX_ROOMS env): beyond, room:create fails with SERVER_FULL. */
+export const MAX_ROOMS = 20;
+/** All room audio (uploads + recordings) on the server's disk at once. */
+export const MAX_TMP_BYTES = 2 * 1024 * 1024 * 1024;
 export const MIN_PLAYERS = 2;
 /** Teams mode: at least two teams, so there is always someone else's team to vote for. */
 export const MIN_PLAYERS_TEAMS = 3;

@@ -20,6 +20,8 @@ const MESSAGES: Record<ErrorCode, string> = {
   NOT_ENOUGH_SOUNDS: 'Tick at least one sound to play with.',
   NO_DIALOGUES:
     'Teams mode needs at least one ticked dialogue (a sound tagged “team” with its lines).',
+  SERVER_FULL: 'All rooms are taken right now. Try again in a few minutes.',
+  RATE_LIMITED: 'Slow down! Too many attempts, wait a minute and try again.',
   LIBRARY_UNAVAILABLE: 'The sound library is unavailable right now. Try again in a moment.',
   SPECTATOR: 'You’re watching this game; you’ll play in the next one.',
 };

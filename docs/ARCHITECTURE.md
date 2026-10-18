@@ -124,10 +124,28 @@ tmp/rooms/<code>/          ephemeral, one dir per room
 
 ## Security notes
 
-- Every socket payload is validated with zod. Nicknames are length-limited and sanitized.
-- Players get a `sessionToken` (random, 128-bit) when they join. It's required for HTTP routes and for reconnecting.
-- Uploads are rate-limited and size-limited. Uploaded files are never executed or transcoded on the server.
-- LiveKit tokens are short-lived and scoped to one room.
+There are no accounts: a player is a nickname plus a random session token, and the only secret is the library's admin token. The threats that matter are someone abusing the server (filling the disk, flooding), griefing a room, or tampering with the library.
+
+- **Input:** every socket payload and HTTP query is validated with zod. Nicknames and labels are NFC-normalised and stripped of control and invisible characters (zero-width, bidi overrides), so two names that look alike are equal. React renders all user text as text (no `innerHTML`).
+- **Sessions:** players get a `sessionToken` (random, 128-bit) when they join. HTTP routes take it from the `X-Session-Token` header only, never the URL (logs, history). One socket holds at most one seat.
+- **What clients see:** `toState` is built per viewer. No tokens, file paths or future sounds are sent. Votes are private (only who has voted). Recordings appear at playback, behind random URLs that still need a seat in the room.
+- **Abuse limits:**
+  - at most 200 rooms and 2 GB of room audio on disk (`SERVER_FULL`);
+  - per-address rate limits on entering rooms and uploading (`RATE_LIMITED`);
+  - a per-connection limit on socket events (the connection is dropped);
+  - nginx `limit_req` zones in front.
+- **Files:** uploads are ≤ 2 MB, recognised by their bytes, measured by the server, never executed or transcoded. They are served with `nosniff` and `Content-Security-Policy: sandbox`, so a file opened directly can't act as a page.
+- **Web app headers:**
+  - a strict CSP: scripts only from the game's origin; connections only to the game, the library and LiveKit; no framing;
+  - `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and a restrictive `Permissions-Policy`.
+- **Voice:** LiveKit tokens last 2 minutes, are scoped to one room, and allow the microphone only (no camera, screen share or data messages).
+- **Admin (sound library):**
+  - writes need the bearer token, compared in constant time;
+  - production refuses tokens under 16 characters;
+  - after 10 wrong tokens an address is locked out for a while (429);
+  - every write is logged with its address;
+  - the admin page keeps the token for the tab only, unless "Remember on this device" is ticked, and forgets it as soon as the server refuses it;
+  - the nginx example shows how to restrict admin writes to your own address.
 
 ## Deployment
 

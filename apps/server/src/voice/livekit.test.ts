@@ -15,7 +15,7 @@ const livekitUp = await fetch(opts.url.replace(/^ws/, 'http'))
   .catch(() => false);
 
 describe('LiveKit voice adapter', () => {
-  it('mints a room-scoped token with the requested publish right', async () => {
+  it('mints a short-lived, room-scoped, microphone-only token', async () => {
     const verifier = new TokenVerifier(opts.apiKey, opts.apiSecret);
     const claims = await verifier.verify(
       await voice.createToken('ABCD', { identity: 'p1', name: 'Alice' }, false),
@@ -27,7 +27,11 @@ describe('LiveKit voice adapter', () => {
       roomJoin: true,
       canPublish: false,
       canSubscribe: true,
+      canPublishData: false,
     });
+    // Voice only (no camera or screen share), and only valid long enough to connect.
+    expect(claims.video?.canPublishSources).toEqual(['microphone']);
+    expect(claims.exp! - claims.nbf!).toBeLessThanOrEqual(120);
   });
 
   it.skipIf(!livekitUp)('tolerates rooms and participants that do not exist', async () => {

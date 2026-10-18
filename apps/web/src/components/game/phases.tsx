@@ -3,7 +3,7 @@ import { MAX_VOTES_PER_PLAYER, type Performance, type Player, type RoomState } f
 import { useRecorder, type RecorderStatus } from '../../hooks/useRecorder';
 import { backToLobby, castVote } from '../../lib/actions';
 import {
-  downloadUrl,
+  downloadRecording,
   playAt,
   playSegmentsAt,
   renderSegments,
@@ -371,11 +371,18 @@ function PerformanceActions({ room, performance }: { room: RoomState; performanc
     room.teams ? 'performance' : 'attempt'
   }`;
   const stitched = performance.parts.some((p) => p.role !== null);
-  const downloadStitched = async () => {
+  /** Teams: render the stitched scene to WAV. Classic: the recording as uploaded. */
+  const download = async () => {
     setRendering(true);
     try {
-      const blob = await renderSegments(segmentsOf(room, performance), performance.durationMs);
-      saveBlob(blob, `${recordingName(room, performance)}.wav`);
+      if (stitched) {
+        const blob = await renderSegments(segmentsOf(room, performance), performance.durationMs);
+        saveBlob(blob, `${recordingName(room, performance)}.wav`);
+      } else {
+        await downloadRecording(performance.parts[0]!.url, recordingName(room, performance));
+      }
+    } catch (err) {
+      console.warn('[download] failed', err);
     } finally {
       setRendering(false);
     }
@@ -386,18 +393,11 @@ function PerformanceActions({ room, performance }: { room: RoomState; performanc
         label={`Replay ${label}`}
         onClick={() => replaySegments(segmentsOf(room, performance))}
       />
-      {stitched ? (
-        <DownloadButton
-          label={`Download ${label}`}
-          busy={rendering}
-          onClick={() => void downloadStitched()}
-        />
-      ) : (
-        <DownloadButton
-          href={downloadUrl(performance.parts[0]!.url, recordingName(room, performance))}
-          label={`Download ${label}`}
-        />
-      )}
+      <DownloadButton
+        label={`Download ${label}`}
+        busy={rendering}
+        onClick={() => void download()}
+      />
     </>
   );
 }

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
-import express, { Router, type ErrorRequestHandler } from 'express';
+import express, { Router, type ErrorRequestHandler, type RequestHandler } from 'express';
 import {
   MAX_CUSTOM_SOUND_MS,
   MAX_UPLOAD_BYTES,
@@ -12,6 +12,7 @@ import type { AudioStorage } from '../audio/storage.js';
 import type { GameRunner } from '../game/GameRunner.js';
 import { clipUrl } from '../game/state.js';
 import { RoomError, type RoomManager } from '../rooms/RoomManager.js';
+import type { Limits } from '../limits.js';
 import { requireSession, type SessionLocals } from './auth.js';
 
 const STATUS: Partial<Record<string, number>> = {
@@ -22,10 +23,21 @@ const STATUS: Partial<Record<string, number>> = {
   SPECTATOR: 403,
   UNSUPPORTED_FORMAT: 415,
   FILE_TOO_LARGE: 413,
+  RATE_LIMITED: 429,
+  SERVER_FULL: 507,
 };
 
-export function audioRoutes(rooms: RoomManager, game: GameRunner, storage: AudioStorage) {
+export function audioRoutes(
+  rooms: RoomManager,
+  game: GameRunner,
+  storage: AudioStorage,
+  limits: Limits,
+) {
   const router = Router();
+  const uploadLimit: RequestHandler = (req, _res, next) => {
+    if (!limits.upload.take(req.ip ?? '')) throw new RoomError('RATE_LIMITED');
+    next();
+  };
 
   // The body is the raw audio blob (Content-Type is ignored: the bytes are sniffed instead).
   router.post(
@@ -64,6 +76,7 @@ export function audioRoutes(rooms: RoomManager, game: GameRunner, storage: Audio
   // Kept as a temp file until it is deleted or the room closes.
   router.post(
     '/api/rooms/:code/sounds',
+    uploadLimit,
     requireSession(rooms),
     express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
     async (req, res) => {
@@ -108,6 +121,9 @@ export function audioRoutes(rooms: RoomManager, game: GameRunner, storage: Audio
     }
     res.type(stored.mime);
     res.setHeader('Cache-Control', 'private, max-age=3600');
+    // Uploaded bytes: never let a browser treat them as a page.
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
     // ?download=<name>: save as "<name>.<ext>" instead of playing inline.
     if (typeof req.query.download === 'string') {
       res.attachment(`${safeFileName(req.query.download)}${path.extname(stored.path)}`);

@@ -18,7 +18,17 @@ export const PhaseSchema = z.enum([
   'FINAL_RESULTS',
 ]);
 
-export const NicknameSchema = z.string().trim().min(1).max(20);
+/**
+ * Text shown to other players: NFC-normalised, without control or invisible format characters
+ * (zero-width spaces, bidi overrides…), so two names that look the same are the same.
+ */
+export const visibleText = (max: number) =>
+  z
+    .string()
+    .transform((s) => s.normalize('NFC').replace(/[\p{Cc}\p{Cf}]/gu, ''))
+    .pipe(z.string().trim().min(1).max(max));
+
+export const NicknameSchema = visibleText(20);
 export const ColorSchema = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 export const RoomCodeSchema = z
   .string()
@@ -62,7 +72,7 @@ export const VotePayload = z.object({
 });
 export const TimeSyncPayload = z.object({ clientTime: z.number() });
 export const SetVoiceMutedPayload = z.object({ muted: z.boolean() });
-export const SoundLabelSchema = z.string().trim().min(1).max(40);
+export const SoundLabelSchema = visibleText(40);
 
 // Sound library (apps/sounds)
 

@@ -46,16 +46,26 @@ export async function unlockAudio() {
   useAudioUnlock.setState({ blocked: audioContext().state === 'suspended' });
 }
 
-/** Room audio under /api needs the session token; <audio>-style requests can't send headers. */
-export function authUrl(url: string) {
-  if (!url.startsWith('/api/')) return url;
-  const token = loadSession()?.sessionToken;
-  return token ? `${url}?t=${encodeURIComponent(token)}` : url;
+/**
+ * Fetches audio. Room audio (under /api) needs the session token, sent as a header: never in
+ * the URL, where it would end up in logs and history. Library sounds are public.
+ */
+function fetchAudio(url: string, init?: RequestInit) {
+  const token = url.startsWith('/api/') ? loadSession()?.sessionToken : undefined;
+  return fetch(url, token ? { ...init, headers: { 'X-Session-Token': token } } : init);
 }
 
-/** Link that saves a room recording as "<name>.<ext>" (the server picks the extension). */
-export function downloadUrl(url: string, name: string) {
-  return `${authUrl(url)}&download=${encodeURIComponent(name)}`;
+/** Saves a room recording as "<name>.<ext>" (the server picks the extension). */
+export async function downloadRecording(url: string, name: string) {
+  const res = await fetchAudio(`${url}?download=${encodeURIComponent(name)}`);
+  if (!res.ok) throw new Error(`download ${res.status}`);
+  // Prefer the UTF-8 name (filename*), keep the ASCII fallback otherwise.
+  const header = res.headers.get('content-disposition') ?? '';
+  const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(header)?.[1];
+  const fileName = utf8
+    ? decodeURIComponent(utf8)
+    : (/filename="([^"]+)"/.exec(header)?.[1] ?? name);
+  saveBlob(await res.blob(), fileName);
 }
 
 /** A decoded sound and the gain that brings it to the common loudness (see loudness.ts). */
@@ -69,7 +79,7 @@ const buffers = new Map<string, Promise<LoadedSound>>();
 export function preload(url: string) {
   let buffer = buffers.get(url);
   if (!buffer) {
-    buffer = fetch(authUrl(url))
+    buffer = fetchAudio(url)
       .then((res) => {
         if (!res.ok) throw new Error(`audio ${res.status}: ${url}`);
         return res.arrayBuffer();

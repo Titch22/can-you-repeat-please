@@ -1,4 +1,4 @@
-import { AccessToken, RoomServiceClient } from 'livekit-server-sdk';
+import { AccessToken, RoomServiceClient, TrackSource } from 'livekit-server-sdk';
 
 export interface VoiceParticipant {
   identity: string;
@@ -17,8 +17,10 @@ export interface VoiceService {
 
 export const voiceRoomName = (code: string) => `cyrp-${code}`;
 
+/** Voice only: no camera, no screen share, no data messages. */
 const permission = (canPublish: boolean) => ({
   canPublish,
+  canPublishSources: [TrackSource.MICROPHONE],
   canSubscribe: true,
   canPublishData: false,
 });
@@ -43,9 +45,15 @@ export function createLiveKitVoice(opts: {
       const token = new AccessToken(opts.apiKey, opts.apiSecret, {
         identity: who.identity,
         name: who.name,
-        ttl: '15m', // only needs to be valid when connecting
+        // Only needs to be valid when connecting (a fresh one is fetched for every connection):
+        // short, so a kicked player can't come back with the one they had.
+        ttl: '2m',
       });
-      token.addGrant({ room: voiceRoomName(code), roomJoin: true, ...permission(canPublish) });
+      token.addGrant({
+        room: voiceRoomName(code),
+        roomJoin: true,
+        ...permission(canPublish),
+      });
       return token.toJwt();
     },
 

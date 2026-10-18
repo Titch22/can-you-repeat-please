@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { Server } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { LibrarySound, TagCount } from '@cyrp/shared';
+import { RateLimiter, type LibrarySound, type TagCount } from '@cyrp/shared';
 import { createSoundsApp } from './app.js';
 import { importDir } from './importDir.js';
 import { Library, slugify } from './library.js';
@@ -38,11 +38,18 @@ let dir: string;
 let library: Library;
 let server: Server;
 let base: string;
+let limits: { failedAuth: RateLimiter; upload: RateLimiter };
 
 beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cyrp-sounds-'));
   library = new Library(dir, 'https://sounds.test');
-  const app = createSoundsApp({ library, adminToken: TOKEN, clientOrigin: ['http://game.test'] });
+  limits = { failedAuth: new RateLimiter(5, 60_000), upload: new RateLimiter(1000, 1) };
+  const app = createSoundsApp({
+    library,
+    adminToken: TOKEN,
+    clientOrigin: ['http://game.test'],
+    limits,
+  });
   server = app.listen(0);
   await new Promise((r) => server.once('listening', r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -64,6 +71,23 @@ const json = async <T>(res: Response) => (await res.json()) as T;
 const list = async (query = '') => json<LibrarySound[]>(await fetch(`${base}/v1/sounds?${query}`));
 
 describe('sounds API', () => {
+  it('locks an address out after repeated wrong tokens', async () => {
+    const check = (token: string) =>
+      fetch(`${base}/v1/admin`, { headers: { Authorization: `Bearer ${token}` } });
+    expect((await check(TOKEN)).status).toBe(200);
+    for (let i = 0; i < 5; i++) expect((await check('nope')).status).toBe(401);
+    // Even the right token is refused from that address for a while.
+    expect((await check(TOKEN)).status).toBe(429);
+  });
+
+  it('sends security headers and keeps the health check minimal', async () => {
+    const res = await fetch(`${base}/health`);
+    expect(await res.json()).toEqual({ ok: true });
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(res.headers.get('content-security-policy')).toContain('sandbox');
+    expect(res.headers.get('x-powered-by')).toBeNull();
+  });
+
   it('refuses writes without the admin token', async () => {
     expect((await upload(wav(1), 'label=A', 'wrong')).status).toBe(401);
     const noAuth = await fetch(`${base}/v1/sounds?label=A`, {
@@ -75,7 +99,7 @@ describe('sounds API', () => {
     const check = (token: string) =>
       fetch(`${base}/v1/admin`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await check('wrong')).status).toBe(401);
-    expect((await check(TOKEN)).status).toBe(200);
+    expect(await (await check(TOKEN)).json()).toEqual({ ok: true, sounds: 0 });
     expect(await list()).toEqual([]);
   });
 
@@ -106,6 +130,8 @@ describe('sounds API', () => {
     expect(labels(await list('minMs=2000'))).toEqual(['Long moo']);
     expect(labels(await list('q=MOO'))).toEqual(['Long moo']);
     expect(labels(await list('q=%25'))).toEqual([]);
+    expect(labels(await list('limit=2'))).toEqual(['Bruh', 'Long moo']);
+    expect((await fetch(`${base}/v1/sounds?limit=5000`)).status).toBe(400);
     expect((await fetch(`${base}/v1/sounds?minMs=abc`)).status).toBe(400);
 
     expect(await json<TagCount[]>(await fetch(`${base}/v1/tags`))).toEqual([

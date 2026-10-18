@@ -24,20 +24,25 @@ import {
   useLibrary,
 } from '../lib/library';
 
+/**
+ * The admin token is kept for this tab only (sessionStorage), unless "Remember on this device"
+ * is ticked (localStorage). Locking, or a token the server refuses, forgets it everywhere.
+ */
 const TOKEN_KEY = 'cyrp.adminToken';
 const readToken = () => {
   try {
-    return localStorage.getItem(TOKEN_KEY) ?? '';
+    return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY) ?? '';
   } catch {
     return '';
   }
 };
-const writeToken = (token: string | null) => {
+const writeToken = (token: string | null, remember = false) => {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
+    sessionStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(TOKEN_KEY);
+    if (token) (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
   } catch {
-    // Private mode: the token just isn't remembered.
+    // Private mode: the token just isn't kept.
   }
 };
 
@@ -91,11 +96,17 @@ export function AdminPage() {
       {checking ? (
         <p className="m-auto animate-pulse text-muted">Checking…</p>
       ) : token ? (
-        <Library token={token} />
+        <Library
+          token={token}
+          onRejected={() => {
+            writeToken(null);
+            setToken(null);
+          }}
+        />
       ) : (
         <TokenForm
-          onUnlock={(t) => {
-            writeToken(t);
+          onUnlock={(t, remember) => {
+            writeToken(t, remember);
             setToken(t);
           }}
         />
@@ -104,8 +115,9 @@ export function AdminPage() {
   );
 }
 
-function TokenForm({ onUnlock }: { onUnlock: (token: string) => void }) {
+function TokenForm({ onUnlock }: { onUnlock: (token: string, remember: boolean) => void }) {
   const [value, setValue] = useState('');
+  const [remember, setRemember] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -114,7 +126,7 @@ function TokenForm({ onUnlock }: { onUnlock: (token: string) => void }) {
     setError(null);
     const ok = await adminCheckToken(value.trim());
     setBusy(false);
-    if (ok) onUnlock(value.trim());
+    if (ok) onUnlock(value.trim(), remember);
     else setError(LIBRARY_ERROR_TEXT.UNAUTHORIZED);
   };
   return (
@@ -129,6 +141,14 @@ function TokenForm({ onUnlock }: { onUnlock: (token: string) => void }) {
           autoComplete="current-password"
           className={inputClass}
         />
+        <label className="flex items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={remember}
+            onChange={(e) => setRemember(e.target.checked)}
+          />
+          Remember on this device
+        </label>
         <Button type="submit" disabled={!value.trim() || busy}>
           Unlock
         </Button>
@@ -138,7 +158,8 @@ function TokenForm({ onUnlock }: { onUnlock: (token: string) => void }) {
   );
 }
 
-function Library({ token }: { token: string }) {
+/** `onRejected`: the server no longer accepts the token (changed, or locked out). */
+function Library({ token, onRejected }: { token: string; onRejected: () => void }) {
   const [sounds, setSounds] = useState<LibrarySound[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [filter, setFilter] = useState<SoundFilter>(NO_FILTER);
@@ -169,6 +190,7 @@ function Library({ token }: { token: string }) {
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-start">
       <UploadCard
         token={token}
+        onRejected={onRejected}
         knownTags={allTags.map(([t]) => t)}
         onAdded={(s) =>
           change((list) =>
@@ -203,6 +225,7 @@ function Library({ token }: { token: string }) {
               key={s.id}
               sound={s}
               token={token}
+              onRejected={onRejected}
               onChanged={replace}
               onDeleted={() => change((list) => list.filter((x) => x.id !== s.id))}
             />
@@ -215,10 +238,12 @@ function Library({ token }: { token: string }) {
 
 function UploadCard({
   token,
+  onRejected,
   knownTags,
   onAdded,
 }: {
   token: string;
+  onRejected: () => void;
   knownTags: string[];
   onAdded: (sound: LibrarySound) => void;
 }) {
@@ -247,6 +272,12 @@ function UploadCard({
           .trim()
           .slice(0, 40) || 'Sound';
       const result = await adminUpload(token, f, label, tags);
+      // Token refused: stop here rather than sending every file to be refused too.
+      if (!result.ok && (result.error === 'UNAUTHORIZED' || result.error === 'RATE_LIMITED')) {
+        setProgress(null);
+        onRejected();
+        return;
+      }
       if (result.ok) {
         added++;
         onAdded(result.value);
@@ -316,11 +347,13 @@ function UploadCard({
 function SoundRow({
   sound,
   token,
+  onRejected,
   onChanged,
   onDeleted,
 }: {
   sound: LibrarySound;
   token: string;
+  onRejected: () => void;
   onChanged: (s: LibrarySound) => void;
   onDeleted: () => void;
 }) {
@@ -336,6 +369,7 @@ function SoundRow({
     const result = await adminUpdate(token, sound.id, patch);
     setBusy(false);
     if (result.ok) onChanged(result.value);
+    else if (result.error === 'UNAUTHORIZED') onRejected();
     else {
       setError(LIBRARY_ERROR_TEXT[result.error]);
       setLabel(sound.label);
@@ -361,6 +395,7 @@ function SoundRow({
     const result = await adminDelete(token, sound.id);
     setBusy(false);
     if (result.ok || result.error === 'NOT_FOUND') onDeleted();
+    else if (result.error === 'UNAUTHORIZED') onRejected();
     else setError(LIBRARY_ERROR_TEXT[result.error]);
   };
 

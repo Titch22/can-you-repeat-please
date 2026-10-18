@@ -5,6 +5,11 @@
 proxy_cache_path /var/cache/nginx/cyrp_sounds levels=1:2 keys_zone=cyrp_sounds:10m max_size=2g
                  inactive=30d use_temp_path=off;
 
+# Per-address request limits, a first line of defence in front of the apps' own limits.
+# (Socket.IO messages travel inside one connection: the game server limits those itself.)
+limit_req_zone $binary_remote_addr zone=cyrp_api:10m rate=10r/s;
+limit_req_zone $binary_remote_addr zone=cyrp_admin:10m rate=2r/s;
+
 # WebSocket upgrade helper. If another site already defines $connection_upgrade, delete this block.
 map $http_upgrade $connection_upgrade {
     default upgrade;
@@ -19,6 +24,14 @@ server {
 
     # Recording uploads are at most 2 MB.
     client_max_body_size 3m;
+
+    location /api/ {
+        limit_req zone=cyrp_api burst=40 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:3000;
@@ -48,6 +61,20 @@ server {
         proxy_cache cyrp_sounds;
         proxy_cache_valid 200 30d;
         add_header X-Cache-Status $upstream_cache_status;
+    }
+
+    # Admin routes (writes need the admin token anyway). To restrict them to your own address,
+    # uncomment the allow/deny lines. Reads (GET) stay public: the game needs them.
+    location /v1/ {
+        limit_req zone=cyrp_admin burst=20 nodelay;
+        # limit_except GET HEAD OPTIONS {
+        #     allow 203.0.113.7;   # your IP
+        #     deny all;
+        # }
+        proxy_pass http://127.0.0.1:3100;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 
     location / {

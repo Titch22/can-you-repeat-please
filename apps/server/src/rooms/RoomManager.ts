@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   MAX_CUSTOM_SOUNDS_PER_ROOM,
   MAX_PLAYERS,
+  MAX_ROOMS,
   RECONNECT_GRACE_MS,
   ROOM_CODE_LENGTH,
   ROOM_IDLE_TIMEOUT_MS,
@@ -76,6 +77,7 @@ export class RoomManager {
   constructor(
     private hooks: RoomManagerHooks = {},
     private now: () => number = Date.now,
+    private maxRooms = MAX_ROOMS,
   ) {}
 
   get size() {
@@ -94,6 +96,7 @@ export class RoomManager {
   }
 
   create(nickname: string, color: string, socketId: string) {
+    if (this.rooms.size >= this.maxRooms) throw new RoomError('SERVER_FULL');
     const player = this.newPlayer(nickname, color, socketId, false);
     const room: Room = {
       code: this.newCode(),

@@ -135,6 +135,8 @@ export type ErrorCode =
   | 'NOT_ENOUGH_SOUNDS'
   | 'LIBRARY_UNAVAILABLE'
   | 'NO_DIALOGUES'
+  | 'SERVER_FULL'
+  | 'RATE_LIMITED'
   | 'SPECTATOR';
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode };
@@ -151,4 +153,5 @@ export type LibraryErrorCode =
   | 'FILE_TOO_LARGE'
   | 'UNSUPPORTED_FORMAT'
   | 'SOUND_TOO_LONG'
-  | 'DUPLICATE';
+  | 'DUPLICATE'
+  | 'RATE_LIMITED';

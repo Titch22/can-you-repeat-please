@@ -110,5 +110,6 @@ export const LIBRARY_ERROR_TEXT: Record<LibraryErrorCode | 'NETWORK', string> = 
   UNSUPPORTED_FORMAT: 'Not a supported audio file.',
   SOUND_TOO_LONG: 'Too long (20 seconds max).',
   DUPLICATE: 'Already in the library.',
+  RATE_LIMITED: 'Too many attempts from this address: wait a minute.',
   NETWORK: 'The sound library is unreachable.',
 };
