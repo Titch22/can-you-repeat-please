@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { Phase, RoomState } from '@cyrp/shared';
 import { useDocumentTitle } from '../../hooks/useDocumentTitle';
-import { preload, unlockAudio, useAudioUnlock } from '../../lib/audio';
+import { clearAudioCache, preload, unlockAudio, useAudioUnlock } from '../../lib/audio';
 import { setDucked, useVoice } from '../../lib/voice';
 import { useGame } from '../../store';
 import { Header } from '../Header';
@@ -54,6 +54,9 @@ export function GameView({ room }: { room: RoomState }) {
     setDucked(room.phase === 'REFERENCE' || room.phase === 'PLAYBACK');
     return () => setDucked(false);
   }, [room.phase]);
+
+  // Decoded audio is big (MBs per clip): drop the last round's before preloading this one's.
+  useEffect(() => clearAudioCache(), [room.round]);
 
   // Fetch and decode sounds ahead of their scheduled start.
   const toPreload = [

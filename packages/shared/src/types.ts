@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { TEAM_TAG } from './constants.js';
+import { LIBRARY_ID_PREFIX, TEAM_TAG } from './constants.js';
 import type {
   DialogueLineSchema,
   GameModeSchema,
@@ -142,6 +142,16 @@ export type ErrorCode =
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode };
 
 export type LibrarySound = z.infer<typeof LibrarySoundSchema>;
+
+/** A library sound as rooms use it: a SoundRef with a `lib:` id (see LIBRARY_ID_PREFIX). */
+export const toSoundRef = (s: LibrarySound): SoundRef & { tags: string[] } => ({
+  id: `${LIBRARY_ID_PREFIX}${s.id}`,
+  label: s.label,
+  durationMs: s.durationMs,
+  url: s.url,
+  tags: s.tags,
+  lines: s.lines,
+});
 export type TagCount = z.infer<typeof TagCountSchema>;
 export type LibrarySoundPatch = z.infer<typeof LibrarySoundPatchSchema>;
 

@@ -26,7 +26,7 @@ const voice = {
   createToken: vi.fn(async (code: string, who: { identity: string }, canPublish: boolean) =>
     JSON.stringify({ code, identity: who.identity, canPublish }),
   ),
-  setPublishAllowed: vi.fn(async () => {}),
+  setPublishAllowed: vi.fn(async (_code: string, _allowed: boolean) => {}),
   removeParticipant: vi.fn(async () => {}),
   closeRoom: vi.fn(async () => {}),
 } satisfies VoiceService;
@@ -43,7 +43,7 @@ const limits: Limits = {
   upload: new RateLimiter(1000, 1),
   socketEvents: new RateLimiter(1000, 1),
 };
-const { server, close } = createApp({
+const { server, close, setVoiceMuted } = createApp({
   storage,
   voice,
   library,
@@ -297,6 +297,22 @@ describe('voice', () => {
     await alice.emitWithAck('debug:setVoiceMuted', { muted: false });
     expect(await bobUnmuted).toEqual({ muted: false });
     expect(voice.setPublishAllowed).toHaveBeenLastCalledWith(created.code, true);
+  });
+
+  it('applies back-to-back mute changes to LiveKit in order', async () => {
+    const { created } = await roomWithTwo();
+    const applied: boolean[] = [];
+    // The mute is slow to reach LiveKit; the unmute right after must still land last.
+    voice.setPublishAllowed
+      .mockImplementationOnce(async (_code, allowed) => {
+        await new Promise((r) => setTimeout(r, 50));
+        applied.push(allowed);
+      })
+      .mockImplementationOnce(async (_code, allowed) => {
+        applied.push(allowed);
+      });
+    await Promise.all([setVoiceMuted(created.code, true), setVoiceMuted(created.code, false)]);
+    expect(applied).toEqual([false, true]);
   });
 
   it('removes kicked players from voice and closes the voice room with the room', async () => {

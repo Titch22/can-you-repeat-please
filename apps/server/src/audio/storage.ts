@@ -52,10 +52,16 @@ export function createAudioStorage(rootDir: string, maxBytes = MAX_TMP_BYTES) {
       const file = path.join(roomDir(code), name);
       const previous = sizes.get(file) ?? 0;
       if (used - previous + data.length > maxBytes) throw new RoomError('SERVER_FULL');
-      await fs.mkdir(roomDir(code), { recursive: true });
-      await fs.writeFile(file, data);
+      // Reserve before writing: concurrent uploads must see each other's bytes.
       used += data.length - previous;
       sizes.set(file, data.length);
+      try {
+        await fs.mkdir(roomDir(code), { recursive: true });
+        await fs.writeFile(file, data);
+      } catch (err) {
+        forget(file);
+        throw err;
+      }
       return file;
     },
 

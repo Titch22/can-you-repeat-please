@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import {
-  LIBRARY_ID_PREFIX,
+  toSoundRef,
   type LibraryErrorCode,
   type LibrarySound,
   type LibrarySoundPatch,
@@ -15,15 +15,6 @@ export const SOUNDS_URL = (import.meta.env.VITE_SOUNDS_URL ?? '/sounds-api').rep
 
 /** A library sound as the lobby uses it: a SoundRef with a `lib:` id, plus its tags. */
 export type LibraryRef = SoundRef & { tags: string[] };
-
-export const toLibraryRef = (s: LibrarySound): LibraryRef => ({
-  id: `${LIBRARY_ID_PREFIX}${s.id}`,
-  label: s.label,
-  durationMs: s.durationMs,
-  url: s.url,
-  tags: s.tags,
-  lines: s.lines,
-});
 
 export async function fetchLibrary(init?: RequestInit): Promise<LibrarySound[]> {
   const res = await fetch(`${SOUNDS_URL}/v1/sounds`, init);
@@ -44,7 +35,7 @@ export const useLibrary = create<LibraryStore>((set) => ({
   async load() {
     set({ error: false });
     try {
-      set({ sounds: (await fetchLibrary()).map(toLibraryRef) });
+      set({ sounds: (await fetchLibrary()).map(toSoundRef) });
     } catch {
       set({ error: true });
     }

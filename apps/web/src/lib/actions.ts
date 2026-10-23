@@ -1,6 +1,7 @@
 import type { Ack, ErrorCode, Settings, SoundRef } from '@cyrp/shared';
 import { useGame } from '../store';
 import { socket } from './socket';
+import { clearAudioCache } from './audio';
 import { releaseMic } from './mic';
 import { loadSession, saveSession, type Profile } from './storage';
 
@@ -46,6 +47,10 @@ export async function resumeSession() {
   );
   if (ack.ok) {
     useGame.setState({ playerId: ack.playerId, resuming: false });
+  } else if (ack.error === 'INTERNAL') {
+    // Timeout or server hiccup: the seat is still held (grace period), so keep it and retry.
+    // If the socket dropped meanwhile, the next connect retries instead.
+    setTimeout(() => socket.connected && void resumeSession(), 2000);
   } else {
     saveSession(null);
     useGame.setState({ room: null, playerId: null, resuming: false });
@@ -55,6 +60,7 @@ export async function resumeSession() {
 /** Local cleanup after leaving, being kicked, or the room closing. */
 export function endSession(notice: string | null = null) {
   void releaseMic();
+  clearAudioCache();
   saveSession(null);
   useGame.setState({ room: null, playerId: null, resuming: false, notice });
 }

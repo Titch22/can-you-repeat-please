@@ -1,9 +1,4 @@
-import {
-  LIBRARY_ID_PREFIX,
-  LibrarySoundSchema,
-  type LibrarySound,
-  type SoundRef,
-} from '@cyrp/shared';
+import { LibrarySoundSchema, toSoundRef, type SoundRef } from '@cyrp/shared';
 import { RoomError } from '../rooms/RoomManager.js';
 
 /** Resolves the library sounds a room selected (apps/sounds). */
@@ -14,15 +9,6 @@ export interface LibraryClient {
    */
   resolve(ids: string[]): Promise<SoundRef[]>;
 }
-
-export const toSoundRef = (s: LibrarySound): SoundRef => ({
-  id: `${LIBRARY_ID_PREFIX}${s.id}`,
-  label: s.label,
-  durationMs: s.durationMs,
-  url: s.url,
-  tags: s.tags,
-  lines: s.lines,
-});
 
 export function createLibraryClient(baseUrl: string, timeoutMs = 5000): LibraryClient {
   return {

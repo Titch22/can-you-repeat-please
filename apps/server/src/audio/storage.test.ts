@@ -43,4 +43,13 @@ describe('audio storage budget', () => {
     await storage.saveFile('WXYZ', 'd.wav', Buffer.alloc(10));
     expect(storage.usedBytes).toBe(10);
   });
+
+  it('counts concurrent uploads against the budget', async () => {
+    const storage = newStorage(10);
+    const results = await Promise.all(
+      ['a', 'b', 'c'].map((n) => refused(storage.saveFile('ABCD', `${n}.wav`, Buffer.alloc(4)))),
+    );
+    expect(results).toEqual([null, null, 'SERVER_FULL']);
+    expect(storage.usedBytes).toBe(8);
+  });
 });

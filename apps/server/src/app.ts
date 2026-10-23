@@ -48,7 +48,6 @@ export function createApp({
     }),
   );
   app.use(cors({ origin: config.clientOrigin }));
-  app.use(express.json());
 
   app.get('/api/health', (_req, res) => {
     res.json({ ok: true });
@@ -104,10 +103,11 @@ export function createApp({
 
   /**
    * Game-wide voice mute (recording phase). Muting tells clients first so they go quiet
-   * instantly, then revokes publishing in LiveKit as enforcement. Unmuting restores
-   * permissions first, so clients can republish their mic as soon as they hear about it.
+   * instantly, then revokes publishing in LiveKit as enforcement. Unmuting clears the flag
+   * first (voice tokens minted from then on may publish), then restores permissions in LiveKit,
+   * then tells clients.
    */
-  const setVoiceMuted = async (code: string, muted: boolean) => {
+  const applyVoiceMute = async (code: string, muted: boolean) => {
     const notify = (room: Room) => {
       for (const p of room.players) {
         if (p.socketId) io.to(p.socketId).emit('voice:mute', { muted });
@@ -117,9 +117,23 @@ export function createApp({
       notify(rooms.setVoiceMuted(code, true));
       await voice.setPublishAllowed(code, false);
     } else {
+      if (rooms.get(code)) rooms.setVoiceMuted(code, false);
       await voice.setPublishAllowed(code, true);
-      if (rooms.get(code)) notify(rooms.setVoiceMuted(code, false));
+      const room = rooms.get(code);
+      if (room) notify(room);
     }
+  };
+  /** One change at a time per room, so LiveKit always ends in the last requested state. */
+  const muteQueues = new Map<string, Promise<void>>();
+  const setVoiceMuted = (code: string, muted: boolean) => {
+    const previous = muteQueues.get(code) ?? Promise.resolve();
+    const next = previous.catch(() => {}).then(() => applyVoiceMute(code, muted));
+    muteQueues.set(code, next);
+    const cleanup = () => {
+      if (muteQueues.get(code) === next) muteQueues.delete(code);
+    };
+    next.then(cleanup, cleanup);
+    return next;
   };
 
   const game = new GameRunner({

@@ -27,13 +27,3 @@ export const MAX_DIALOGUE_LINES = 30;
 export const MIN_DIALOGUE_LINE_MS = 300;
 /** How long after the recording window uploads are still accepted. */
 export const RECORDING_UPLOAD_GRACE_MS = 3_000;
-
-export const ALLOWED_AUDIO_MIME = [
-  'audio/mpeg',
-  'audio/ogg',
-  'audio/wav',
-  'audio/x-wav',
-  'audio/webm',
-  'audio/mp4',
-  'audio/x-m4a',
-] as const;
