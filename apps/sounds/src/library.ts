@@ -31,8 +31,9 @@ interface Row {
   label: string;
   duration_ms: number;
   file: string;
+  background_file: string | null;
   tags: string | null;
-  /** JSON array of [startMs, endMs, speaker], in order. */
+  /** JSON array of [startMs, endMs, speaker, text, wordStartsMs], in order. */
   lines: string;
 }
 
@@ -64,7 +65,8 @@ export class Library {
         file TEXT NOT NULL,
         mime TEXT NOT NULL,
         bytes INTEGER NOT NULL,
-        created_at INTEGER NOT NULL
+        created_at INTEGER NOT NULL,
+        background_file TEXT
       );
       CREATE INDEX IF NOT EXISTS sounds_file ON sounds(file);
       CREATE TABLE IF NOT EXISTS sound_tags (
@@ -79,9 +81,15 @@ export class Library {
         start_ms INTEGER NOT NULL,
         end_ms INTEGER NOT NULL,
         speaker TEXT NOT NULL CHECK (speaker IN ('A', 'B')),
+        text TEXT NOT NULL DEFAULT '',
+        word_starts TEXT NOT NULL DEFAULT '[]',
         PRIMARY KEY (sound_id, idx)
       );
     `);
+    // Columns added after the first release: existing databases get them here.
+    this.addColumn('sound_lines', 'text', "TEXT NOT NULL DEFAULT ''");
+    this.addColumn('sound_lines', 'word_starts', "TEXT NOT NULL DEFAULT '[]'");
+    this.addColumn('sounds', 'background_file', 'TEXT');
   }
 
   close() {
@@ -146,10 +154,7 @@ export class Library {
   }
 
   add(sound: NewSound): LibrarySound {
-    const file = `${sha256(sound.data)}.${sound.format.ext}`;
-    const filePath = path.join(this.filesDir, file);
-    const newFile = !fs.existsSync(filePath);
-    if (newFile) fs.writeFileSync(filePath, sound.data);
+    const { file, newFile } = this.storeFile(sound.data, sound.format);
     const id = this.uniqueId(sound.id ?? slugify(sound.label));
     this.transaction(
       () => {
@@ -169,7 +174,7 @@ export class Library {
         this.setTags(id, sound.tags);
       },
       // Don't leave an unreferenced file behind.
-      () => newFile && fs.rmSync(filePath, { force: true }),
+      () => newFile && this.deleteIfUnused(file),
     );
     return this.get(id)!;
   }
@@ -193,31 +198,71 @@ export class Library {
       if (patch.lines !== undefined) {
         this.db.prepare('DELETE FROM sound_lines WHERE sound_id = ?').run(id);
         const insert = this.db.prepare(
-          'INSERT INTO sound_lines (sound_id, idx, start_ms, end_ms, speaker) VALUES (?, ?, ?, ?, ?)',
+          'INSERT INTO sound_lines (sound_id, idx, start_ms, end_ms, speaker, text, word_starts) VALUES (?, ?, ?, ?, ?, ?, ?)',
         );
-        patch.lines.forEach((l, i) => insert.run(id, i, l.startMs, l.endMs, l.speaker));
+        patch.lines.forEach((l, i) =>
+          insert.run(id, i, l.startMs, l.endMs, l.speaker, l.text, JSON.stringify(l.wordStartsMs)),
+        );
       }
     });
     return this.get(id);
   }
 
-  /** Deletes the sound, and its file once no other sound uses it. False if unknown. */
+  /** Deletes the sound, and its files once no other sound uses them. False if unknown. */
   remove(id: string): boolean {
-    const row = this.db.prepare('SELECT file FROM sounds WHERE id = ?').get(id) as
-      { file: string } | undefined;
+    const row = this.files(id);
     if (!row) return false;
     this.db.prepare('DELETE FROM sounds WHERE id = ?').run(id);
-    const stillUsed = this.db.prepare('SELECT 1 FROM sounds WHERE file = ?').get(row.file);
-    if (!stillUsed) fs.rmSync(path.join(this.filesDir, row.file), { force: true });
+    this.deleteIfUnused(row.file);
+    if (row.background_file) this.deleteIfUnused(row.background_file);
     return true;
+  }
+
+  /**
+   * Sets (or, with null, removes) the sound's background: the scene without the voices.
+   * Undefined if the sound doesn't exist.
+   */
+  setBackground(
+    id: string,
+    background: { data: Buffer; format: AudioFormat } | null,
+  ): LibrarySound | undefined {
+    const row = this.files(id);
+    if (!row) return undefined;
+    const file = background ? this.storeFile(background.data, background.format).file : null;
+    this.db.prepare('UPDATE sounds SET background_file = ? WHERE id = ?').run(file, id);
+    if (row.background_file && row.background_file !== file) {
+      this.deleteIfUnused(row.background_file);
+    }
+    return this.get(id);
+  }
+
+  private files(id: string) {
+    return this.db.prepare('SELECT file, background_file FROM sounds WHERE id = ?').get(id) as
+      { file: string; background_file: string | null } | undefined;
+  }
+
+  /** Writes `data` named after its content hash (once: identical files are shared). */
+  private storeFile(data: Buffer, format: AudioFormat) {
+    const file = `${sha256(data)}.${format.ext}`;
+    const filePath = path.join(this.filesDir, file);
+    const newFile = !fs.existsSync(filePath);
+    if (newFile) fs.writeFileSync(filePath, data);
+    return { file, newFile };
+  }
+
+  private deleteIfUnused(file: string) {
+    const used = this.db
+      .prepare('SELECT 1 FROM sounds WHERE file = ? OR background_file = ?')
+      .get(file, file);
+    if (!used) fs.rmSync(path.join(this.filesDir, file), { force: true });
   }
 
   private select(where: string, params: SQLInputValue[]): LibrarySound[] {
     const rows = this.db
       .prepare(
-        `SELECT s.id, s.label, s.duration_ms, s.file,
+        `SELECT s.id, s.label, s.duration_ms, s.file, s.background_file,
            (SELECT group_concat(tag, '${SEP}') FROM (SELECT tag FROM sound_tags t WHERE t.sound_id = s.id ORDER BY tag)) AS tags,
-           (SELECT json_group_array(json_array(start_ms, end_ms, speaker))
+           (SELECT json_group_array(json_array(start_ms, end_ms, speaker, text, json(word_starts)))
               FROM (SELECT * FROM sound_lines l WHERE l.sound_id = s.id ORDER BY idx)) AS lines
          FROM sounds s ${where}
          ${where.includes('ORDER BY') ? '' : 'ORDER BY s.label COLLATE NOCASE, s.id'}`,
@@ -228,10 +273,17 @@ export class Library {
       label: r.label,
       durationMs: r.duration_ms,
       tags: r.tags ? r.tags.split(SEP) : [],
-      lines: (JSON.parse(r.lines) as [number, number, DialogueLine['speaker']][]).map(
-        ([startMs, endMs, speaker]) => ({ startMs, endMs, speaker }),
-      ),
+      lines: (
+        JSON.parse(r.lines) as [number, number, DialogueLine['speaker'], string, number[]][]
+      ).map(([startMs, endMs, speaker, text, wordStartsMs]) => ({
+        startMs,
+        endMs,
+        speaker,
+        text,
+        wordStartsMs,
+      })),
       url: `${this.publicUrl}/files/${r.file}`,
+      backgroundUrl: r.background_file ? `${this.publicUrl}/files/${r.background_file}` : null,
     }));
   }
 
@@ -247,6 +299,13 @@ export class Library {
     let id = base || 'sound';
     while (taken(id)) id = `${base || 'sound'}-${randomBytes(3).toString('hex')}`;
     return id;
+  }
+
+  private addColumn(table: string, column: string, definition: string) {
+    const columns = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (!columns.some((c) => c.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    }
   }
 
   private transaction(fn: () => void, onRollback?: () => void) {

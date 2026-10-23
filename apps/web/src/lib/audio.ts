@@ -164,6 +164,7 @@ function scheduleSegments(
     if (!sound) continue;
     let start = t0 + seg.atMs / 1000;
     let offset = seg.offsetMs / 1000;
+    const gain = (seg.gainUrl && loaded.get(seg.gainUrl)?.gain) || sound.gain;
     // A recording can be a bit shorter than the scene.
     let duration = Math.min(seg.durationMs / 1000, sound.buffer.duration - offset);
     if (start < c.currentTime) {
@@ -178,8 +179,8 @@ function scheduleSegments(
     const level = c.createGain();
     const fade = Math.min(FADE_S, duration / 4);
     level.gain.setValueAtTime(0, start);
-    level.gain.linearRampToValueAtTime(sound.gain, start + fade);
-    level.gain.setValueAtTime(sound.gain, start + duration - fade);
+    level.gain.linearRampToValueAtTime(gain, start + fade);
+    level.gain.setValueAtTime(gain, start + duration - fade);
     level.gain.linearRampToValueAtTime(0, start + duration);
     source.connect(level).connect(destination);
     source.start(start, offset, duration);
@@ -189,7 +190,7 @@ function scheduleSegments(
 }
 
 async function loadAll(segments: Segment[]) {
-  const urls = [...new Set(segments.map((s) => s.url))];
+  const urls = [...new Set(segments.flatMap((s) => (s.gainUrl ? [s.url, s.gainUrl] : [s.url])))];
   const sounds = await Promise.all(urls.map((u) => preload(u)));
   return new Map(urls.map((u, i) => [u, sounds[i]!]));
 }

@@ -53,8 +53,8 @@ export default async function globalSetup() {
       body: JSON.stringify({
         tags: ['e2e', 'team'],
         lines: [
-          { startMs: 0, endMs: 1200, speaker: 'A' },
-          { startMs: 1500, endMs: 2800, speaker: 'B' },
+          { startMs: 0, endMs: 1200, speaker: 'A', text: 'Beep beep.' },
+          { startMs: 1500, endMs: 2800, speaker: 'B', text: 'Boop boop!' },
         ],
       }),
     });

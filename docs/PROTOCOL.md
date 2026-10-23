@@ -31,6 +31,7 @@ interface Settings {
   selectedSoundIds: string[]; // sounds ticked for the game; none by default
   extraRecordMs: number; // 0–3000
   votingMs: number; // 10000–60000
+  replayReference: boolean; // play the original again before the attempts
 }
 
 interface SoundRef {
@@ -41,6 +42,7 @@ interface SoundRef {
   uploadedBy?: string;
   tags?: string[]; // library sounds
   lines?: DialogueLine[]; // library dialogues (the reference carries them in Teams mode)
+  backgroundUrl?: string | null; // library dialogues: the scene without the voices
 }
 
 // Teams mode
@@ -50,6 +52,8 @@ interface DialogueLine {
   startMs: number; // from the start of the file
   endMs: number;
   speaker: Speaker;
+  text: string; // subtitle; '' when not transcribed (optional when sent)
+  wordStartsMs: number[]; // karaoke: when each word of `text` starts; [] = even pace (optional when sent)
 }
 interface Team {
   id: string;
@@ -152,18 +156,23 @@ interface LibrarySound {
   tags: string[]; // lowercase: letters, digits, spaces, dashes; 24 chars max
   lines: DialogueLine[]; // Teams mode dialogues (tag "team"); [] for other sounds
   url: string; // `${SOUNDS_PUBLIC_URL}/files/<sha256>.<ext>`
+  backgroundUrl: string | null; // dialogues: the scene without the voices, same URL scheme
 }
 ```
 
-| Method   | Route                                 | Body                        | Response             | Notes                                                                                                                     |
-| -------- | ------------------------------------- | --------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/health`                             |                             | `{ ok, sounds }`     |                                                                                                                           |
-| `GET`    | `/v1/sounds?tag=&minMs=&maxMs=&q=`    |                             | `LibrarySound[]`     | All filters optional. `tag` repeats (or comma-separated): sounds having **any** of them. Cached 15s                       |
-| `GET`    | `/v1/sounds/:id`                      |                             | `LibrarySound`       |                                                                                                                           |
-| `POST`   | `/v1/sounds/lookup`                   | `{ ids: string[] }`         | `LibrarySound[]`     | Read-only batch lookup (the game server resolves a selection with it). Unknown ids are left out                           |
-| `GET`    | `/v1/tags`                            |                             | `{ name, count }[]`  | Cached 15s                                                                                                                |
-| `GET`    | `/files/<sha256>.<ext>`               |                             | audio bytes          | Named after the content hash, so never changes: `Cache-Control: public, max-age=31536000, immutable`                      |
-| `GET`    | `/v1/admin`                           |                             | `{ ok: true }`       | **Admin.** Checks a token                                                                                                 |
-| `POST`   | `/v1/sounds?label=<name>&tag=a&tag=b` | raw audio bytes             | `LibrarySound` (201) | **Admin.** Same rules as room uploads (≤2 MB, 0.2–20s). 409 `DUPLICATE` with `{ sound }` if the same file exists          |
-| `PATCH`  | `/v1/sounds/:id`                      | `{ label?, tags?, lines? }` | `LibrarySound`       | **Admin.** `tags` and `lines` replace the whole list. Lines: in order, not overlapping, ≥0.3s each, ≤30, within the sound |
-| `DELETE` | `/v1/sounds/:id`                      |                             | `{ ok: true }`       | **Admin.** The file is deleted once no sound uses it. Games already started keep working until they end                   |
+| Method   | Route                                     | Body                                                                                              | Response                       | Notes                                                                                                                                                            |
+| -------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/health`                                 |                                                                                                   | `{ ok, sounds }`               |                                                                                                                                                                  |
+| `GET`    | `/v1/sounds?tag=&minMs=&maxMs=&q=`        |                                                                                                   | `LibrarySound[]`               | All filters optional. `tag` repeats (or comma-separated): sounds having **any** of them. Cached 15s                                                              |
+| `GET`    | `/v1/sounds/:id`                          |                                                                                                   | `LibrarySound`                 |                                                                                                                                                                  |
+| `POST`   | `/v1/sounds/lookup`                       | `{ ids: string[] }`                                                                               | `LibrarySound[]`               | Read-only batch lookup (the game server resolves a selection with it). Unknown ids are left out                                                                  |
+| `GET`    | `/v1/tags`                                |                                                                                                   | `{ name, count }[]`            | Cached 15s                                                                                                                                                       |
+| `GET`    | `/files/<sha256>.<ext>`                   |                                                                                                   | audio bytes                    | Named after the content hash, so never changes: `Cache-Control: public, max-age=31536000, immutable`                                                             |
+| `GET`    | `/v1/admin`                               |                                                                                                   | `{ ok: true }`                 | **Admin.** Checks a token                                                                                                                                        |
+| `POST`   | `/v1/sounds?label=<name>&tag=a&tag=b`     | raw audio bytes                                                                                   | `LibrarySound` (201)           | **Admin.** Same rules as room uploads (≤2 MB, 0.2–20s). 409 `DUPLICATE` with `{ sound }` if the same file exists                                                 |
+| `PATCH`  | `/v1/sounds/:id`                          | `{ label?, tags?, lines? }`                                                                       | `LibrarySound`                 | **Admin.** `tags` and `lines` replace the whole list. Lines: in order, not overlapping, ≥0.3s each, ≤30, within the sound                                        |
+| `PUT`    | `/v1/sounds/:id/background`               | raw audio bytes                                                                                   | `LibrarySound`                 | **Admin.** The scene without the voices (Teams playback). Upload rules, and as long as the sound (±250 ms, else 422 `LENGTH_MISMATCH`)                           |
+| `DELETE` | `/v1/sounds/:id/background`               |                                                                                                   | `LibrarySound`                 | **Admin.** The file is deleted once no sound uses it                                                                                                             |
+| `POST`   | `/v1/transcribe?language=french\|english` | raw mono float32 samples, 16 kHz                                                                  | `{ text, startMs, endMs }[]`   | **Admin.** Speech recognition (Whisper) for "Suggest text": the words said, with their timings. ≤21 s. 503 `TRANSCRIPTION_FAILED` if the model can't run         |
+| `POST`   | `/v1/align`                               | `{ language, samples, lines: { startMs, endMs, text }[] }` (samples: base64 float32, 16 kHz mono) | `{ wordStartsMs: number[][] }` | **Admin.** Forced alignment (wav2vec2): when each word of each line starts; `[]` for a line it couldn't align. 503 `TRANSCRIPTION_FAILED` if the model can't run |
+| `DELETE` | `/v1/sounds/:id`                          |                                                                                                   | `{ ok: true }`                 | **Admin.** The file is deleted once no sound uses it. Games already started keep working until they end                                                          |

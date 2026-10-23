@@ -34,6 +34,7 @@
 | Sounds               | Checkbox per sound: library + lobby uploads    | none    |
 | Extra recording time | 0–3s added to the sound's length               | 1s      |
 | Voting time          | 10–60s                                         | 20s     |
+| Replay the original  | On, off (playback starts with the attempts)    | on      |
 
 ### Custom sounds
 
@@ -67,12 +68,12 @@ Everyone imitates the same sound, every attempt is played back, and everyone vot
 
 Random pairs dub a short movie dialogue: each member of a pair voices one of its two characters, and the pairs compete.
 
-- **Dialogues** are library sounds tagged **team** whose lines are marked in `/admin`: for each line, who speaks (character **A** or **B**), from when to when. One file per scene; any number of lines (A, B, A…). Only dialogues are listed and played in this mode; room uploads aren't used.
+- **Dialogues** are library sounds tagged **team** whose lines are marked in `/admin`: for each line, who speaks (character **A** or **B**), from when to when, and what is said (the subtitle; "Suggest text" fills it with speech recognition, to correct by hand). A dialogue can also get a **background**: the same scene without the voices, made outside the app (UVR, or `demucs --two-stems=vocals`). One file per scene; any number of lines (A, B, A…). Only dialogues are listed and played in this mode; room uploads aren't used.
 - **At least 3 players**, so there are always at least two teams to vote between.
 - **Teams change every round**: players are shuffled into pairs, and each member of a pair gets a random character. With an odd number of players, one player is alone and voices **both** characters. Late joiners watch until the next game.
-- **Listen:** the whole scene plays, with a timeline of its lines; each player's lines are outlined.
-- **Repeat:** everyone records at the same time, over the whole scene, as in Classic. A cue follows the scene: **YOUR LINE!** during your character's lines, your partner's name during theirs, and a countdown before your next line.
-- **Playback:** the original, then each team's **stitched** performance: during each line, the recording of whoever voices that character, at the original timing. The lines of a member who didn't record stay silent.
+- **Listen:** the whole scene plays, with a timeline of its lines; each player's lines are outlined. Subtitles follow the scene karaoke-style: the line being said fills up word by word (timed from the audio by "Suggest text" / "Align words", by tapping along in `/admin`, or at an even pace if not timed), and the next one is dimmed.
+- **Repeat:** everyone records at the same time, over the whole scene, as in Classic. A cue follows the scene: **YOUR LINE!** during your character's lines, your partner's name during theirs, and a countdown before your next line. The subtitles show what to say.
+- **Playback:** the original, then each team's **stitched** performance: during each line, the recording of whoever voices that character, at the original timing. The lines of a member who didn't record stay silent. If the dialogue has a background, it plays under the voices, at the original's level.
 - **Vote:** for other teams (not your own), up to 2 as in Classic. Each vote gives **a point to every member** of the team. The podium stays per player.
 - Each performance can be replayed and downloaded as a WAV of the stitched scene.
 
@@ -80,14 +81,14 @@ Random pairs dub a short movie dialogue: each member of a pair voices one of its
 
 Pause lengths are set in `apps/server/src/game/timing.ts`.
 
-| #   | Phase             | Length                                          | Voice chat         | What happens                                                                                                                                                   |
-| --- | ----------------- | ----------------------------------------------- | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | **Round intro**   | 3s                                              | on                 | "Round 2/5" title card                                                                                                                                         |
-| 2   | **Reference**     | sound length + 3s                               | on, volume lowered | The reference sound plays for everyone at the same time, then "Get ready to repeat it!"                                                                        |
-| 3   | **Recording**     | 3s + sound length + extra time (max 23s) + 2.5s | **muted**          | A 3-2-1 countdown, then everyone records at the same time. A level meter shows the mic is picking up sound. Then "Time's up!" while the last recordings arrive |
-| 4   | **Playback**      | 3s + (clip length + 1.5s) × (players + 1)       | on, volume lowered | "Here come the attempts!", then the reference plays once more, then each recording plays in turn, in shuffled order, with the name of the player who made it   |
-| 5   | **Voting**        | voting time                                     | on                 | Each player upvotes **up to 2** recordings, not their own. Clips can be replayed or downloaded. The phase ends early once everyone has voted                   |
-| 6   | **Round results** | 6s                                              | on                 | Votes received this round and total scores                                                                                                                     |
+| #   | Phase             | Length                                          | Voice chat         | What happens                                                                                                                                                                                  |
+| --- | ----------------- | ----------------------------------------------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Round intro**   | 3s                                              | on                 | "Round 2/5" title card                                                                                                                                                                        |
+| 2   | **Reference**     | sound length + 3s                               | on, volume lowered | The reference sound plays for everyone at the same time, then "Get ready to repeat it!"                                                                                                       |
+| 3   | **Recording**     | 3s + sound length + extra time (max 23s) + 2.5s | **muted**          | A 3-2-1 countdown, then everyone records at the same time. A level meter shows the mic is picking up sound. Then "Time's up!" while the last recordings arrive                                |
+| 4   | **Playback**      | 3s + (clip length + 1.5s) × (players + 1)       | on, volume lowered | "Here come the attempts!", then the reference plays once more (if "Replay the original" is on), then each recording plays in turn, in shuffled order, with the name of the player who made it |
+| 5   | **Voting**        | voting time                                     | on                 | Each player upvotes **up to 2** recordings, not their own. Clips can be replayed or downloaded. The phase ends early once everyone has voted                                                  |
+| 6   | **Round results** | 6s                                              | on                 | Votes received this round and total scores                                                                                                                                                    |
 
 After the last round comes **Final results**: a podium and per-round highlights (the most-voted clip of each round). The host can then send everyone back to the lobby. Settings and custom sounds are kept.
 

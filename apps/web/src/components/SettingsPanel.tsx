@@ -74,6 +74,16 @@ export function SettingsPanel({ settings, editable }: { settings: Settings; edit
           disabled={!editable}
           onChange={(e) => set({ votingMs: Number(e.target.value) })}
         />
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={settings.replayReference}
+            disabled={!editable}
+            onChange={(e) => set({ replayReference: e.target.checked })}
+            className="size-4 shrink-0 cursor-pointer disabled:cursor-default"
+          />
+          <span className="text-muted">Replay the original before the attempts</span>
+        </label>
       </div>
     </Card>
   );

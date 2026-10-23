@@ -61,6 +61,7 @@ export function GameView({ room }: { room: RoomState }) {
   // Fetch and decode sounds ahead of their scheduled start.
   const toPreload = [
     room.reference?.url,
+    room.reference?.backgroundUrl,
     ...room.performances.flatMap((p) => p.parts.map((part) => part.url)),
   ]
     .filter(Boolean)

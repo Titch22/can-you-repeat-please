@@ -9,6 +9,7 @@ import type {
   SettingsSchema,
   SpeakerSchema,
   TagCountSchema,
+  TranscriptLanguageSchema,
 } from './schemas.js';
 
 export type Phase = z.infer<typeof PhaseSchema>;
@@ -40,6 +41,8 @@ export interface SoundRef {
   tags?: string[];
   /** Library dialogues (Teams mode): who speaks when. */
   lines?: DialogueLine[];
+  /** Library dialogues: the scene without the voices, if the admin added one. */
+  backgroundUrl?: string | null;
 }
 
 /** A Teams mode dialogue: tagged "team", with lines for both characters. */
@@ -142,6 +145,13 @@ export type ErrorCode =
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode };
 
 export type LibrarySound = z.infer<typeof LibrarySoundSchema>;
+export type TranscriptLanguage = z.infer<typeof TranscriptLanguageSchema>;
+/** A word heard by the speech recognition, with when it is said (ms from the start). */
+export interface TranscriptWord {
+  text: string;
+  startMs: number;
+  endMs: number;
+}
 
 /** A library sound as rooms use it: a SoundRef with a `lib:` id (see LIBRARY_ID_PREFIX). */
 export const toSoundRef = (s: LibrarySound): SoundRef & { tags: string[] } => ({
@@ -151,6 +161,7 @@ export const toSoundRef = (s: LibrarySound): SoundRef & { tags: string[] } => ({
   url: s.url,
   tags: s.tags,
   lines: s.lines,
+  backgroundUrl: s.backgroundUrl,
 });
 export type TagCount = z.infer<typeof TagCountSchema>;
 export type LibrarySoundPatch = z.infer<typeof LibrarySoundPatchSchema>;
@@ -164,4 +175,6 @@ export type LibraryErrorCode =
   | 'UNSUPPORTED_FORMAT'
   | 'SOUND_TOO_LONG'
   | 'DUPLICATE'
+  | 'LENGTH_MISMATCH'
+  | 'TRANSCRIPTION_FAILED'
   | 'RATE_LIMITED';

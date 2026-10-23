@@ -25,5 +25,7 @@ export const MAX_TAGS_PER_SOUND = 20;
 export const TEAM_TAG = 'team';
 export const MAX_DIALOGUE_LINES = 30;
 export const MIN_DIALOGUE_LINE_MS = 300;
+/** Speech recognition input (POST /v1/transcribe): mono float32 samples at this rate. */
+export const TRANSCRIBE_SAMPLE_RATE = 16_000;
 /** How long after the recording window uploads are still accepted. */
 export const RECORDING_UPLOAD_GRACE_MS = 3_000;

@@ -46,6 +46,8 @@ export const SettingsSchema = z.object({
   selectedSoundIds: z.array(z.string().max(100)).max(2000),
   extraRecordMs: z.number().int().min(0).max(3000),
   votingMs: z.number().int().min(10_000).max(60_000),
+  /** Play the original again before the attempts (off suits long sounds). */
+  replayReference: z.boolean(),
 });
 
 export const DEFAULT_SETTINGS: z.infer<typeof SettingsSchema> = {
@@ -54,6 +56,7 @@ export const DEFAULT_SETTINGS: z.infer<typeof SettingsSchema> = {
   selectedSoundIds: [],
   extraRecordMs: 1000,
   votingMs: 20_000,
+  replayReference: true,
 };
 
 // Client → server payloads
@@ -91,7 +94,26 @@ export const DialogueLineSchema = z.object({
   startMs: z.number().int().min(0),
   endMs: z.number().int().positive(),
   speaker: SpeakerSchema,
+  /** What is said (subtitle); empty when not transcribed yet. */
+  text: z.string().trim().max(200).default(''),
+  /**
+   * When each word of `text` starts (ms from the start of the file), for the karaoke. A word
+   * ends where the next starts, the last one with the line. Empty: an even pace is assumed.
+   */
+  wordStartsMs: z.array(z.number().int().min(0)).max(100).default([]),
 });
+
+/**
+ * Word starts made valid for a line from `startMs` to `endMs`: inside it, in order. For timings
+ * from speech recognition (slightly off the line's edges) and after moving a line's edges.
+ */
+export function fitWordStarts(starts: number[], startMs: number, endMs: number) {
+  let previous = startMs;
+  return starts.map((t) => (previous = Math.min(endMs - 1, Math.max(previous, t))));
+}
+
+/** The words of a line's text, as the karaoke times them (whitespace-separated). */
+export const textWords = (text: string) => text.match(/\S+/g) ?? [];
 
 /** A dialogue's lines: in order, not overlapping, each long enough to say something. */
 export const DialogueLinesSchema = z
@@ -106,6 +128,18 @@ export const DialogueLinesSchema = z
       if (prev && line.startMs < prev.endMs) {
         ctx.addIssue({ code: 'custom', path: [i], message: 'lines overlap or are out of order' });
       }
+      const starts = line.wordStartsMs;
+      if (
+        starts.length &&
+        (starts.length !== textWords(line.text).length ||
+          starts.some((t, j) => t < line.startMs || t >= line.endMs || t < (starts[j - 1] ?? 0)))
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [i, 'wordStartsMs'],
+          message: 'one start per word, in order, within the line',
+        });
+      }
     });
   });
 
@@ -118,6 +152,8 @@ export const LibrarySoundSchema = z.object({
   lines: z.array(DialogueLineSchema).default([]),
   /** Absolute (production) or root-relative (dev proxy) URL of the audio file. */
   url: z.string(),
+  /** Dialogues: the same scene without the voices (music and effects), played under the players. */
+  backgroundUrl: z.string().nullable().default(null),
 });
 export const TagCountSchema = z.object({ name: z.string(), count: z.number().int() });
 
@@ -128,5 +164,29 @@ export const LibrarySoundPatchSchema = z.object({
   /** Replaces all lines; [] clears them. Must also end within the sound (checked by the server). */
   lines: DialogueLinesSchema.optional(),
 });
+/**
+ * Language of a sound to transcribe. Whisper doesn't detect it reliably on such short clips:
+ * without one it assumes English and translates to it.
+ */
+export const TranscriptLanguageSchema = z.enum(['french', 'english']);
+
+/**
+ * POST /v1/align: the sound as mono float32 samples at TRANSCRIBE_SAMPLE_RATE (base64; the
+ * longest sound fits in 2 MB of base64), and the lines whose words to time.
+ */
+export const AlignRequestSchema = z.object({
+  language: TranscriptLanguageSchema,
+  samples: z.base64().max(2_000_000),
+  lines: z
+    .array(
+      z.object({
+        startMs: z.number().int().min(0),
+        endMs: z.number().int().positive(),
+        text: z.string().max(200),
+      }),
+    )
+    .max(MAX_DIALOGUE_LINES),
+});
+
 /** POST /v1/sounds/lookup */
 export const LibraryLookupSchema = z.object({ ids: z.array(z.string().max(100)).max(2000) });

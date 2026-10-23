@@ -22,8 +22,8 @@ const dialogue: SoundRef = {
   ...sound('lib:d1'),
   tags: ['team'],
   lines: [
-    { startMs: 0, endMs: 500, speaker: 'A' },
-    { startMs: 500, endMs: 1000, speaker: 'B' },
+    { startMs: 0, endMs: 500, speaker: 'A', text: 'Hello.', wordStartsMs: [] },
+    { startMs: 500, endMs: 1000, speaker: 'B', text: 'Hi!', wordStartsMs: [] },
   ],
 };
 
@@ -352,6 +352,20 @@ describe('GameRunner', () => {
     const { startsAt, endsAt } = room.game!.recording!;
     expect(endsAt - startsAt).toBe(MAX_CUSTOM_SOUND_MS + 3000);
     expect(endsAt - startsAt).toBeLessThanOrEqual(MAX_RECORDING_MS);
+  });
+
+  it('skips the original in playback when replayReference is off', async () => {
+    const { game, room, id } = setup(['Alice', 'Bob']);
+    room.settings.replayReference = false;
+    await game.start(room.code, id('Alice'));
+    advanceTo(room, 'RECORDING');
+    vi.setSystemTime(room.game!.recording!.endsAt + 10);
+    for (const name of ['Alice', 'Bob']) {
+      game.beginUpload(room, id(name), 1);
+      game.finishUpload(room, id(name), `clip-${name}`);
+    }
+    advanceTo(room, 'PLAYBACK');
+    expect(room.game!.playback!.items.map((i) => i.kind)).toEqual(['performance', 'performance']);
   });
 
   it('refuses to start when no sound is ticked', async () => {

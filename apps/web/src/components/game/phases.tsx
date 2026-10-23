@@ -23,6 +23,7 @@ import {
   PlayersLabel,
   RoleBadge,
   speakerText,
+  Subtitle,
 } from './teams';
 
 interface PhaseProps {
@@ -36,7 +37,7 @@ function recordingName(room: RoomState, performance: Performance) {
 }
 
 const segmentsOf = (room: RoomState, performance: Performance) =>
-  performanceSegments(performance, room.reference?.lines);
+  performanceSegments(performance, room.reference);
 
 /** Plays `url` for everyone at `startsAt` (server time) while mounted. */
 function useScheduledSound(url: string | undefined, startsAt: number | undefined) {
@@ -146,6 +147,7 @@ export function ReferencePhase({ room, me }: PhaseProps) {
             startsAt={ref.startsAt}
             myRole={role}
           />
+          <Subtitle lines={ref.lines} ms={now - ref.startsAt} myRole={role} />
           {role && (
             <p className="text-sm text-muted">
               Your lines are outlined: you voice{' '}
@@ -265,13 +267,14 @@ export function RecordingPhase({ room, me }: PhaseProps) {
         </p>
       )}
       {lines?.length && (status === 'countdown' || status === 'recording') ? (
-        <div className="w-full max-w-lg">
+        <div className="flex w-full max-w-lg flex-col gap-2">
           <DialogueTimeline
             lines={lines}
             durationMs={room.reference!.durationMs}
             startsAt={rec.startsAt}
             myRole={mine?.role}
           />
+          <Subtitle lines={lines} ms={now - rec.startsAt} myRole={mine?.role} />
         </div>
       ) : null}
       {status === 'recording' && (
@@ -319,8 +322,8 @@ export function PlaybackPhase({ room }: PhaseProps) {
       <Stage testId="playback">
         <Headline>{teams ? 'Here come the teams!' : 'Here come the attempts!'}</Headline>
         <Lead>
-          The original first, then {total}{' '}
-          {teams ? (total === 1 ? 'team' : 'teams') : total === 1 ? 'attempt' : 'attempts'}.
+          {pb.items[0]?.kind === 'reference' ? 'The original first, then ' : ''}
+          {total} {teams ? (total === 1 ? 'team' : 'teams') : total === 1 ? 'attempt' : 'attempts'}.
         </Lead>
       </Stage>
     );
@@ -349,13 +352,16 @@ export function PlaybackPhase({ room }: PhaseProps) {
           )}
         </div>
       )}
-      <div className="w-full max-w-lg">
+      <div className="flex w-full max-w-lg flex-col gap-2">
         {teams && lines?.length ? (
-          <DialogueTimeline
-            lines={lines}
-            durationMs={room.reference!.durationMs}
-            startsAt={pb.startsAt}
-          />
+          <>
+            <DialogueTimeline
+              lines={lines}
+              durationMs={room.reference!.durationMs}
+              startsAt={pb.startsAt}
+            />
+            <Subtitle lines={lines} ms={now - pb.startsAt} />
+          </>
         ) : (
           <ProgressBar from={pb.startsAt} to={pb.startsAt + item.durationMs} />
         )}

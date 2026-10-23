@@ -5,6 +5,8 @@ import {
   type LibrarySound,
   type LibrarySoundPatch,
   type SoundRef,
+  type TranscriptLanguage,
+  type TranscriptWord,
 } from '@cyrp/shared';
 
 /**
@@ -85,6 +87,53 @@ export const adminUpdate = (token: string, id: string, patch: LibrarySoundPatch)
     body: JSON.stringify(patch),
   });
 
+/** Sets the dialogue's background (the scene without the voices), or removes it with null. */
+export const adminSetBackground = (token: string, id: string, file: Blob | null) =>
+  adminCall<LibrarySound>(token, `/v1/sounds/${encodeURIComponent(id)}/background`, {
+    method: file ? 'PUT' : 'DELETE',
+    body: file,
+  });
+
+/** Speech to text on the sounds service: `samples` from toTranscriptionInput (transcribe.ts). */
+export const adminTranscribe = (
+  token: string,
+  samples: Float32Array<ArrayBuffer>,
+  language: TranscriptLanguage,
+) =>
+  adminCall<TranscriptWord[]>(token, `/v1/transcribe?language=${language}`, {
+    method: 'POST',
+    body: samples,
+  });
+
+/** Base64 of `bytes` (in chunks: spreading a whole sound into one call overflows the stack). */
+function base64(bytes: Uint8Array) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  }
+  return btoa(binary);
+}
+
+/**
+ * Word timings by forced alignment on the sounds service: when each word of each line's text
+ * starts ([] for a line it couldn't align). `samples` from toTranscriptionInput (transcribe.ts).
+ */
+export const adminAlign = (
+  token: string,
+  samples: Float32Array,
+  language: TranscriptLanguage,
+  lines: { startMs: number; endMs: number; text: string }[],
+) =>
+  adminCall<{ wordStartsMs: number[][] }>(token, '/v1/align', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      language,
+      samples: base64(new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength)),
+      lines,
+    }),
+  });
+
 export const adminDelete = (token: string, id: string) =>
   adminCall<{ ok: true }>(token, `/v1/sounds/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
@@ -101,6 +150,8 @@ export const LIBRARY_ERROR_TEXT: Record<LibraryErrorCode | 'NETWORK', string> = 
   UNSUPPORTED_FORMAT: 'Not a supported audio file.',
   SOUND_TOO_LONG: 'Too long (20 seconds max).',
   DUPLICATE: 'Already in the library.',
+  LENGTH_MISMATCH: 'The background must be as long as the sound itself.',
+  TRANSCRIPTION_FAILED: 'The speech recognition failed (see the sounds service logs).',
   RATE_LIMITED: 'Too many attempts from this address: wait a minute.',
   NETWORK: 'The sound library is unreachable.',
 };

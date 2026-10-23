@@ -251,7 +251,9 @@ export class GameRunner {
     g.performances = buildPerformances([...g.recordings.values()], g.teams, clipMs, this.rng);
     const ref = g.reference!;
     const items: PlaybackItem[] = [
-      { kind: 'reference', url: ref.url, durationMs: ref.durationMs },
+      ...(room.settings.replayReference
+        ? [{ kind: 'reference' as const, url: ref.url, durationMs: ref.durationMs }]
+        : []),
       ...g.performances.map((performance) => ({
         kind: 'performance' as const,
         performance,

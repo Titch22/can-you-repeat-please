@@ -15,6 +15,7 @@
   "dependencies": {
     "@cyrp/audio": "workspace:^",
     "@cyrp/shared": "workspace:^",
+    "@huggingface/transformers": "^4.3.1",
     "cors": "^2.8.6",
     "express": "^5.3.0",
     "music-metadata": "^12.2.2",

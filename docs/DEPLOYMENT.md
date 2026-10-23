@@ -123,6 +123,7 @@ certbot adds the HTTPS config and the HTTP → HTTPS redirect, and renews the ce
   docker compose exec sounds node dist/import.js /tmp/import --tag animal --tag classic
   ```
 
+- **Suggest text** and **Align words** (dialogue subtitles and karaoke timing) run in the sounds container: speech recognition (Whisper, ~80 MB) and word alignment (wav2vec2: French ~355 MB, English ~95 MB). Each model is downloaded from Hugging Face on first use and kept in the `sounds-data` volume under `models/` (no need to back it up). Loaded, they take **~800 MB** (Whisper) and **~650 MB** (French alignment) of RAM, so up to ~1.5 GB right after a "Suggest text"; each is freed after 5 idle minutes. A request uses a few seconds of CPU.
 - **Backup:** the `sounds-data` volume is the only state worth keeping.
 
   ```bash

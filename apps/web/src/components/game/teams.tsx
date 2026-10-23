@@ -1,6 +1,6 @@
 import type { DialogueLine, Player, Role, RoomState, Speaker } from '@cyrp/shared';
 import { useServerNow } from '../../lib/clock';
-import { speaks } from '../../lib/dialogue';
+import { lineAt, saidSoFar, speaks } from '../../lib/dialogue';
 import { Avatar } from '../ui';
 
 /** The player, or a stand-in if they left the room since. */
@@ -79,6 +79,60 @@ export function PlayersLabel({
         );
       })}
     </span>
+  );
+}
+
+/**
+ * Karaoke-style subtitle: the line being said `ms` into the scene, in its character's color
+ * (bold when it's the viewer's), with a bar sweeping through its text; the next line dimmed.
+ * Nothing for untranscribed dialogues.
+ */
+export function Subtitle({
+  lines,
+  ms,
+  myRole,
+}: {
+  lines: DialogueLine[];
+  ms: number;
+  myRole?: Role | null;
+}) {
+  if (!lines.some((l) => l.text)) return null;
+  const { current, next } = lineAt(lines, ms);
+  const say = (line: DialogueLine) => (
+    <>
+      <RoleBadge role={line.speaker} className="mr-2 align-middle" />
+      {line.text || '…'}
+    </>
+  );
+  const [said, rest] = current ? saidSoFar(current, ms) : ['', ''];
+  return (
+    <div
+      className="flex min-h-20 w-full max-w-lg flex-col items-center gap-1 text-center"
+      data-testid="subtitle"
+    >
+      {current && (
+        <p
+          className={`font-display text-xl sm:text-2xl ${speakerText(current.speaker)} ${
+            speaks(myRole, current.speaker) ? 'font-black' : 'font-semibold'
+          }`}
+        >
+          <RoleBadge role={current.speaker} className="mr-2 align-middle" />
+          {current.text ? (
+            <>
+              {said}
+              <span
+                aria-hidden
+                className="mx-px inline-block h-[1.1em] w-[3px] translate-y-[0.15em] rounded-full bg-current"
+              />
+              <span className="opacity-40">{rest}</span>
+            </>
+          ) : (
+            '…'
+          )}
+        </p>
+      )}
+      {next && <p className="text-sm text-subtle">{say(next)}</p>}
+    </div>
   );
 }
 
