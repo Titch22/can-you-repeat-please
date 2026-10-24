@@ -197,7 +197,7 @@ export function Avatar({
 export function Page({ children, wide = false }: { children: ReactNode; wide?: boolean }) {
   return (
     <main
-      className={`mx-auto flex min-h-screen w-full ${wide ? 'lg:max-w-[90%]' : 'max-w-3xl'} flex-col gap-5 px-4 pt-3 pb-10 sm:gap-6`}
+      className={`mx-auto flex w-full flex-1 ${wide ? 'lg:max-w-[90%]' : 'max-w-3xl'} flex-col gap-5 px-4 pt-3 pb-10 sm:gap-6`}
     >
       {children}
     </main>
