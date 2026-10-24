@@ -31,7 +31,8 @@ COPY --from=build /out/server/package.json apps/server/package.json
 COPY --from=build /out/server/node_modules apps/server/node_modules
 COPY --from=build /app/apps/server/dist apps/server/dist
 COPY --from=build /app/apps/web/dist apps/web/dist
-RUN mkdir tmp && chown node:node tmp
+# tmp: room audio (wiped at start). data: the accounts database (a volume: back it up).
+RUN mkdir tmp data && chown node:node tmp data
 
 USER node
 EXPOSE 3000

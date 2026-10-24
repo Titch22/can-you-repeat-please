@@ -11,6 +11,7 @@ import {
   type ServerToClientEvents,
   type SoundRef,
 } from '@cyrp/shared';
+import { createAccounts } from './accounts/store.js';
 import { FAST_TIMING } from './game/timing.js';
 import { createApp } from './app.js';
 import { createAudioStorage } from './audio/storage.js';
@@ -42,9 +43,16 @@ const limits: Limits = {
   enterRoom: new RateLimiter(1000, 1),
   upload: new RateLimiter(1000, 1),
   socketEvents: new RateLimiter(1000, 1),
+  auth: new RateLimiter(1000, 1),
 };
+// Sign-up needs a code (the default); "boss" is an admin.
+const accounts = createAccounts(path.join(tmpRoot, 'accounts.db'), {
+  openSignup: false,
+  admins: ['boss'],
+});
 const { server, close, setVoiceMuted } = createApp({
   storage,
+  accounts,
   voice,
   library,
   timing: FAST_TIMING,
@@ -94,6 +102,7 @@ afterEach(() => {
 
 afterAll(() => {
   close();
+  accounts.close();
   fs.rmSync(tmpRoot, { recursive: true, force: true });
 });
 
@@ -497,5 +506,121 @@ describe('custom sounds over HTTP', () => {
       404,
     );
     await waitFor(() => onDisk().length === 4);
+  });
+});
+
+describe('accounts over HTTP', () => {
+  /** A browser-like client: keeps the session cookie between requests. */
+  const client = () => {
+    let cookie = '';
+    const call = async (method: string, url: string, body?: unknown) => {
+      const res = await fetch(`${baseUrl}${url}`, {
+        method,
+        headers: { 'Content-Type': 'application/json', ...(cookie ? { Cookie: cookie } : {}) },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const set = res.headers.get('set-cookie');
+      if (set) cookie = set.split(';')[0]!;
+      return { status: res.status, body: await res.json(), setCookie: set };
+    };
+    return { call };
+  };
+  const code = () => accounts.createInvites(1)[0]!;
+
+  it('signs up with a code only, with an HttpOnly SameSite cookie', async () => {
+    const alice = client();
+    expect(await alice.call('GET', '/api/account')).toMatchObject({
+      body: { user: null, signup: 'code' },
+    });
+    expect(
+      (
+        await alice.call('POST', '/api/account/signup', {
+          username: 'alice',
+          password: 'pw-alice-1',
+        })
+      ).body,
+    ).toEqual({ ok: false, error: 'INVALID_CODE' });
+
+    const res = await alice.call('POST', '/api/account/signup', {
+      username: 'alice',
+      password: 'pw-alice-1',
+      code: code(),
+    });
+    expect(res.body).toEqual({ user: { username: 'alice', isAdmin: false }, signup: 'code' });
+    expect(res.setCookie).toMatch(/HttpOnly/i);
+    expect(res.setCookie).toMatch(/SameSite=Lax/i);
+    expect((await alice.call('GET', '/api/account')).body.user).toEqual({
+      username: 'alice',
+      isAdmin: false,
+    });
+    // Too short a password, or a bad username.
+    for (const bad of [
+      { username: 'bob', password: 'short', code: code() },
+      { username: 'b', password: 'long-enough', code: code() },
+      { username: 'bob<script>', password: 'long-enough', code: code() },
+    ]) {
+      expect((await client().call('POST', '/api/account/signup', bad)).status).toBe(400);
+    }
+  });
+
+  it('changes the password of the logged-in user only, with the old one', async () => {
+    const carol = client();
+    await carol.call('POST', '/api/account/signup', {
+      username: 'carol',
+      password: 'pw-carol-1',
+      code: code(),
+    });
+    const change = (oldPassword: string, c = carol) =>
+      c.call('POST', '/api/account/password', { oldPassword, newPassword: 'pw-carol-2' });
+    expect((await change('pw-carol-1', client())).status).toBe(401); // not logged in
+    expect((await change('wrong-one')).status).toBe(401);
+    expect((await change('pw-carol-1')).body).toEqual({ ok: true });
+    const again = client();
+    expect(
+      (
+        await again.call('POST', '/api/account/login', {
+          username: 'carol',
+          password: 'pw-carol-2',
+        })
+      ).status,
+    ).toBe(200);
+    await again.call('POST', '/api/account/logout');
+    expect((await again.call('GET', '/api/account')).body.user).toBeNull();
+  });
+
+  it('gives the admin tools to admins only; a reset password goes to the console only', async () => {
+    const dave = client();
+    await dave.call('POST', '/api/account/signup', {
+      username: 'dave',
+      password: 'pw-dave-1',
+      code: code(),
+    });
+    expect((await dave.call('GET', '/api/admin/users')).status).toBe(403);
+    expect((await client().call('GET', '/api/admin/users')).status).toBe(401);
+
+    const boss = client();
+    await boss.call('POST', '/api/account/signup', {
+      username: 'Boss',
+      password: 'pw-boss-1',
+      code: code(),
+    });
+    const { body: codes } = await boss.call('POST', '/api/admin/invites', { count: 3 });
+    expect(codes.codes).toHaveLength(3);
+    expect((await boss.call('DELETE', `/api/admin/invites/${codes.codes[0]}`)).status).toBe(200);
+    const users = (await boss.call('GET', '/api/admin/users')).body as { username: string }[];
+    expect(users.map((u) => u.username)).toContain('dave');
+
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const reset = await boss.call('POST', '/api/admin/users/dave/reset-password');
+    const line = log.mock.calls.flat().find((m) => String(m).includes('password of "dave"'));
+    log.mockRestore();
+    expect(reset.body).toEqual({ ok: true });
+    const password = String(line).split(': ').at(-1)!;
+    expect(JSON.stringify(reset.body)).not.toContain(password);
+    // Dave is logged out, and logs in with the new password.
+    expect((await dave.call('GET', '/api/account')).body.user).toBeNull();
+    expect(
+      (await dave.call('POST', '/api/account/login', { username: 'dave', password })).status,
+    ).toBe(200);
   });
 });

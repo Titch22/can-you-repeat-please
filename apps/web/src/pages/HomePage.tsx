@@ -5,6 +5,7 @@ import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { Logo } from '../components/Logo';
 import { ProfileFields, useProfile } from '../components/ProfileFields';
 import { Button, Card, ErrorText, Notice, Page, inputClass } from '../components/ui';
+import { useAccount } from '../lib/account';
 import { createRoom, joinRoom } from '../lib/actions';
 import { errorMessage } from '../lib/errors';
 import { useGame } from '../store';
@@ -20,6 +21,7 @@ export function HomePage() {
   const { profile, raw, update, valid } = useProfile();
   const notice = useGame((s) => s.notice);
   const currentRoom = useGame((s) => s.room);
+  const account = useAccount((s) => s.user);
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -49,7 +51,15 @@ export function HomePage() {
 
   return (
     <Page>
-      <header className="animate-enter pt-8 pb-2 sm:pt-12">
+      <nav className="flex justify-end text-sm">
+        <Link
+          to={account ? '/account' : '/login'}
+          className="font-semibold text-muted underline-offset-2 hover:text-ink hover:underline"
+        >
+          {account ? account.username : 'Log in'}
+        </Link>
+      </nav>
+      <header className="animate-enter pb-2 sm:pt-6">
         <Logo size="lg" />
         <p className="mt-4 text-center text-muted sm:text-lg">
           Hear a sound. Imitate it. Vote for the best (or worst) attempt.

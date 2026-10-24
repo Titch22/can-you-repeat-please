@@ -12,7 +12,7 @@ How to run the game on a Debian VPS that already has Docker and nginx. Everythin
                  └─────────────────────────────────────────────────────────────┘
 ```
 
-- **game**: built from the repo's `Dockerfile`. One Node process serves the web app, the API and Socket.IO.
+- **game**: built from the repo's `Dockerfile`. One Node process serves the web app, the API and Socket.IO. Player accounts live in its `game-data` volume (`accounts.db`): **back it up**.
 - **livekit**: the official LiveKit image, configured by `deploy/livekit.yaml`.
 - **sounds**: the sound library, built from `apps/sounds/Dockerfile`. Its data (`library.db` and the audio files) lives in the `sounds-data` Docker volume: **back it up**. It starts empty: add sounds from the admin page.
 - **HTTPS is required**: browsers only allow microphone access on secure pages.
@@ -124,12 +124,32 @@ certbot adds the HTTPS config and the HTTP → HTTPS redirect, and renews the ce
   ```
 
 - **Suggest text** and **Align words** (dialogue subtitles and karaoke timing) run in the sounds container: speech recognition (Whisper, ~80 MB) and word alignment (wav2vec2: French ~355 MB, English ~95 MB). Each model is downloaded from Hugging Face on first use and kept in the `sounds-data` volume under `models/` (no need to back it up). Loaded, they take **~800 MB** (Whisper) and **~650 MB** (French alignment) of RAM, so up to ~1.5 GB right after a "Suggest text"; each is freed after 5 idle minutes. A request uses a few seconds of CPU.
-- **Backup:** the `sounds-data` volume is the only state worth keeping.
+- **Backup:** the `sounds-data` and `game-data` volumes are the only state worth keeping.
 
   ```bash
   docker run --rm -v cyrp_sounds-data:/data -v "$PWD":/backup debian:stable-slim \
     tar czf /backup/sounds-$(date +%F).tgz -C /data .
+  docker run --rm -v cyrp_game-data:/data -v "$PWD":/backup debian:stable-slim \
+    tar czf /backup/game-$(date +%F).tgz -C /data .
   ```
+
+## Player accounts
+
+- **Sign-up** needs a single-use code from an admin, unless `ACCOUNT_CREATION=open` in `deploy/.env` (anyone can then sign up). Playing doesn't need an account.
+- **Admins** are the usernames listed in `ADMIN_USERNAMES` (comma-separated). They manage codes and accounts at `https://game.yourdomain.com/admin/accounts`.
+- **The first account:** with sign-up closed and no account yet, the game prints a code at startup. Create your own account with it (with a name listed in `ADMIN_USERNAMES`):
+
+  ```bash
+  docker compose logs game | grep 'no account yet'
+  ```
+
+- **Password resets:** an admin's "Reset password" gives the account a new random password, printed in the game's console, never shown in the browser. Read it and hand it over:
+
+  ```bash
+  docker compose logs game | grep 'reset by'
+  ```
+
+  Players change it from `/account` (with the current one).
 
 ## Upgrading an existing install to the sound library
 

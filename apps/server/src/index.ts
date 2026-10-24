@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { createAccounts } from './accounts/store.js';
 import { createApp } from './app.js';
 import { createAudioStorage } from './audio/storage.js';
 import { config } from './config.js';
@@ -9,12 +11,17 @@ import { createLiveKitVoice } from './voice/livekit.js';
 const storage = createAudioStorage(config.paths.tmpRooms);
 await storage.wipeAll();
 
+const accounts = createAccounts(path.join(config.paths.data, 'accounts.db'), config.accounts);
+const firstCode = accounts.firstAccountCode();
+if (firstCode) console.log(`[accounts] no account yet: sign up with the code ${firstCode}`);
+
 const voice = createLiveKitVoice(config.livekit);
 const library = createLibraryClient(config.soundsUrl);
 const timing = process.env.GAME_FAST === '1' ? FAST_TIMING : DEFAULT_TIMING;
 
 const { server } = createApp({
   storage,
+  accounts,
   voice,
   library,
   timing,

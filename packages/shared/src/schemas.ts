@@ -190,3 +190,28 @@ export const AlignRequestSchema = z.object({
 
 /** POST /v1/sounds/lookup */
 export const LibraryLookupSchema = z.object({ ids: z.array(z.string().max(100)).max(2000) });
+
+// Accounts (game server, /api/account)
+
+/** Letters (any script), digits, `_`, `.` and `-`; fits a nickname, so it can prefill one. */
+export const UsernameSchema = z
+  .string()
+  .transform((s) => s.normalize('NFC').trim())
+  .pipe(z.string().regex(/^[\p{L}\p{N}_.-]{3,20}$/u));
+export const PasswordSchema = z.string().min(8).max(200);
+
+export const SignupSchema = z.object({
+  username: UsernameSchema,
+  password: PasswordSchema,
+  /** Needed unless sign-up is open (ACCOUNT_CREATION=open). */
+  code: z.string().trim().max(64).optional(),
+});
+export const LoginSchema = z.object({
+  username: z.string().max(100),
+  password: z.string().max(200),
+});
+export const PasswordChangeSchema = z.object({
+  oldPassword: z.string().max(200),
+  newPassword: PasswordSchema,
+});
+export const InviteCountSchema = z.object({ count: z.number().int().min(1).max(50) });

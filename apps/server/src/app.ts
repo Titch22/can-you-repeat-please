@@ -4,12 +4,14 @@ import path from 'node:path';
 import express, { type ErrorRequestHandler } from 'express';
 import cors from 'cors';
 import { Server } from 'socket.io';
+import type { Accounts } from './accounts/store.js';
 import type { AudioStorage } from './audio/storage.js';
 import { config } from './config.js';
 import { GameRunner } from './game/GameRunner.js';
 import { defaultLimits, type Limits } from './limits.js';
 import type { Timing } from './game/timing.js';
 import { RoomManager, type Room } from './rooms/RoomManager.js';
+import { accountRoutes } from './routes/accounts.js';
 import { audioRoutes } from './routes/audio.js';
 import type { LibraryClient } from './sounds/library.js';
 import { voiceRoutes } from './routes/voice.js';
@@ -19,6 +21,7 @@ import type { VoiceService } from './voice/livekit.js';
 
 export interface AppDeps {
   storage: AudioStorage;
+  accounts: Accounts;
   voice: VoiceService;
   library: LibraryClient;
   timing: Timing;
@@ -30,6 +33,7 @@ export interface AppDeps {
 
 export function createApp({
   storage,
+  accounts,
   voice,
   library,
   timing,
@@ -150,6 +154,7 @@ export function createApp({
     },
   });
 
+  app.use(accountRoutes(accounts, limits, { secureCookies: config.production }));
   app.use(voiceRoutes(rooms, voice));
   app.use(audioRoutes(rooms, game, storage, limits));
   const deleteSound = (code: string, playerId: string, soundId: string) => {

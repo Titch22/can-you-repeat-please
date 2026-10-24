@@ -20,6 +20,12 @@ services:
       SOUNDS_INTERNAL_URL: http://sounds:3100
       # Allowed by the web app's Content Security Policy.
       SOUNDS_PUBLIC_URL: https://${SOUNDS_DOMAIN}
+      # Accounts: "open" lets anyone sign up; otherwise a code from an admin is needed.
+      ACCOUNT_CREATION: ${ACCOUNT_CREATION:-}
+      ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
+    # The accounts database (back it up).
+    volumes:
+      - game-data:/app/data
     ports:
       # Only nginx on this machine talks to it.
       - 127.0.0.1:3000:3000
@@ -60,4 +66,5 @@ services:
       - 7882:7882/udp
 
 volumes:
+  game-data:
   sounds-data:

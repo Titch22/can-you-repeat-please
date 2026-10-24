@@ -178,3 +178,20 @@ export type LibraryErrorCode =
   | 'LENGTH_MISMATCH'
   | 'TRANSCRIPTION_FAILED'
   | 'RATE_LIMITED';
+
+/** GET /api/account: who is logged in, and whether sign-up needs a code. */
+export interface AccountInfo {
+  user: { username: string; isAdmin: boolean } | null;
+  signup: 'open' | 'code';
+}
+
+/** Errors of the account routes, as `{ ok: false, error }` bodies. */
+export type AccountErrorCode =
+  | 'INVALID_PAYLOAD'
+  | 'USERNAME_TAKEN'
+  | 'BAD_CREDENTIALS'
+  | 'INVALID_CODE'
+  | 'NOT_LOGGED_IN'
+  | 'NOT_ADMIN'
+  | 'NOT_FOUND'
+  | 'RATE_LIMITED';

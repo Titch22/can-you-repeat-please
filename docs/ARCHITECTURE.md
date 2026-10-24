@@ -124,7 +124,9 @@ tmp/rooms/<code>/          ephemeral, one dir per room
 
 ## Security notes
 
-There are no accounts: a player is a nickname plus a random session token, and the only secret is the library's admin token. The threats that matter are someone abusing the server (filling the disk, flooding), griefing a room, or tampering with the library.
+In a room, a player is a nickname plus a random session token. Optional player accounts (username and password) only prefill the nickname for now. The threats that matter are someone abusing the server (filling the disk, flooding), griefing a room, taking over an account, or tampering with the library.
+
+- **Accounts:** passwords are hashed with scrypt and a random salt (`node:crypto`). Login sets an HttpOnly, `SameSite=Lax` cookie (`Secure` in production); the database only keeps a SHA-256 of each session token. Cross-site requests carry no cookie, and the JSON bodies need a CORS preflight that only `CLIENT_ORIGIN` passes. Sign-up, login and password changes are rate-limited per address; a login for an unknown username takes as long as a wrong password. Admin password resets are printed in the server console, never sent to a browser.
 
 - **Input:** every socket payload and HTTP query is validated with zod. Nicknames and labels are NFC-normalised and stripped of control and invisible characters (zero-width, bidi overrides), so two names that look alike are equal. React renders all user text as text (no `innerHTML`).
 - **Sessions:** players get a `sessionToken` (random, 128-bit) when they join. HTTP routes take it from the `X-Session-Token` header only, never the URL (logs, history). One socket holds at most one seat.
