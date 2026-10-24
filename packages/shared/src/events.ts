@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type {
   DeleteSoundPayload,
+  ShareSoundsPayload,
   KickPayload,
   RoomCreatePayload,
   RoomJoinPayload,
@@ -28,6 +29,7 @@ export interface ClientToServerEvents {
   'room:updateSettings': (p: z.infer<typeof UpdateSettingsPayload>, cb: Cb) => void;
   'room:kick': (p: z.infer<typeof KickPayload>, cb: Cb) => void;
   'room:deleteSound': (p: z.infer<typeof DeleteSoundPayload>, cb: Cb) => void;
+  'room:shareSounds': (p: z.infer<typeof ShareSoundsPayload>, cb: Cb) => void;
   'game:start': (p: object, cb: Cb) => void;
   'game:vote': (p: z.infer<typeof VotePayload>, cb: Cb) => void;
   'game:backToLobby': (p: object, cb: Cb) => void;

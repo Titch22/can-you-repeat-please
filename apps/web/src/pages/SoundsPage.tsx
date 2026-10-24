@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Navigate } from 'react-router';
 import { MAX_UPLOAD_BYTES, TagSchema, type LibrarySound } from '@cyrp/shared';
 import { LinesEditor } from '../components/admin/LinesEditor';
 import { PlayButton } from '../components/game/bits';
-import { Logo } from '../components/Logo';
 import {
   matchesFilter,
   NO_FILTER,
@@ -13,38 +12,17 @@ import {
 } from '../components/SoundFilters';
 import { Button, Card, ErrorText, inputClass, Page } from '../components/ui';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
+import { useAccount } from '../lib/account';
 import { replay } from '../lib/audio';
 import {
-  adminCheckToken,
   adminDelete,
   adminUpdate,
   adminUpload,
-  fetchLibrary,
+  fetchMySounds,
   LIBRARY_ERROR_TEXT,
   useLibrary,
+  type SoundsScope,
 } from '../lib/library';
-
-/**
- * The admin token is kept for this tab only (sessionStorage), unless "Remember on this device"
- * is ticked (localStorage). Locking, or a token the server refuses, forgets it everywhere.
- */
-const TOKEN_KEY = 'cyrp.adminToken';
-const readToken = () => {
-  try {
-    return sessionStorage.getItem(TOKEN_KEY) ?? localStorage.getItem(TOKEN_KEY) ?? '';
-  } catch {
-    return '';
-  }
-};
-const writeToken = (token: string | null, remember = false) => {
-  try {
-    sessionStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(TOKEN_KEY);
-    if (token) (remember ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
-  } catch {
-    // Private mode: the token just isn't kept.
-  }
-};
 
 /** "Meme, Animal" → ['meme', 'animal'], or null if one of them isn't a valid tag. */
 function parseTags(text: string): string[] | null {
@@ -57,129 +35,88 @@ function parseTags(text: string): string[] | null {
   return [...new Set(tags.map((t) => t.data!))];
 }
 
-/** Library management (not linked from the game): upload, tag, rename, delete. */
-export function AdminPage() {
-  useDocumentTitle('Sound library admin');
-  const [token, setToken] = useState<string | null>(null);
-  const [saved] = useState(readToken);
-  const [checking, setChecking] = useState(!!saved);
+const mb = (bytes: number) =>
+  bytes < 1024 * 1024 ? `${Math.ceil(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
-  // A remembered token is checked once on load.
-  useEffect(() => {
-    if (!saved) return;
-    void adminCheckToken(saved).then((ok) => {
-      if (ok) setToken(saved);
-      else writeToken(null);
-      setChecking(false);
-    });
-  }, [saved]);
+/**
+ * A logged-in user's own sounds: upload, tag, rename, delete, and dialogue lines. They can
+ * share them with a room from its lobby. Admins also manage the shared library here.
+ */
+export function SoundsPage() {
+  useDocumentTitle('My sounds');
+  const { user, loaded } = useAccount();
+  const [scope, setScope] = useState<SoundsScope>('mine');
+
+  if (!loaded) return null;
+  if (!user) return <Navigate to="/login" replace />;
 
   return (
     <Page wide>
-      <header className="flex items-center justify-between gap-3 pt-2">
-        <Link to="/" aria-label="Home">
-          <Logo size="sm" />
-        </Link>
-        {token && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              writeToken(null);
-              setToken(null);
-            }}
+      <header className="flex flex-wrap items-center justify-end gap-3 pt-2">
+        {user.isAdmin && (
+          <div
+            className="grid grid-cols-2 gap-1 rounded-control bg-surface-sunken p-1"
+            role="group"
+            aria-label="Whose sounds"
           >
-            Lock
-          </Button>
+            {(
+              [
+                ['mine', 'My sounds'],
+                ['library', 'Shared library'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                onClick={() => setScope(value)}
+                className={`rounded-[0.6rem] px-3 py-1.5 text-sm font-semibold transition ${
+                  scope === value ? 'bg-accent text-accent-ink' : 'text-muted hover:text-ink'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         )}
       </header>
-      {checking ? (
-        <p className="m-auto animate-pulse text-muted">Checking…</p>
-      ) : token ? (
-        <Library
-          token={token}
-          onRejected={() => {
-            writeToken(null);
-            setToken(null);
-          }}
-        />
-      ) : (
-        <TokenForm
-          onUnlock={(t, remember) => {
-            writeToken(t, remember);
-            setToken(t);
-          }}
-        />
-      )}
+      {/* Remounted per scope: each list loads its own sounds. */}
+      <Library key={scope} scope={scope} />
     </Page>
   );
 }
 
-function TokenForm({ onUnlock }: { onUnlock: (token: string, remember: boolean) => void }) {
-  const [value, setValue] = useState('');
-  const [remember, setRemember] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const submit = async (e: FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    const ok = await adminCheckToken(value.trim());
-    setBusy(false);
-    if (ok) onUnlock(value.trim(), remember);
-    else setError(LIBRARY_ERROR_TEXT.UNAUTHORIZED);
-  };
-  return (
-    <Card className="m-auto w-full max-w-sm" title="Sound library admin">
-      <form onSubmit={submit} className="flex flex-col gap-3">
-        <input
-          type="password"
-          value={value}
-          onChange={(e) => setValue(e.target.value)}
-          placeholder="Admin token"
-          aria-label="Admin token"
-          autoComplete="current-password"
-          className={inputClass}
-        />
-        <label className="flex items-center gap-2 text-sm text-muted">
-          <input
-            type="checkbox"
-            checked={remember}
-            onChange={(e) => setRemember(e.target.checked)}
-          />
-          Remember on this device
-        </label>
-        <Button type="submit" disabled={!value.trim() || busy}>
-          Unlock
-        </Button>
-        <ErrorText>{error}</ErrorText>
-      </form>
-    </Card>
-  );
-}
-
-/** `onRejected`: the server no longer accepts the token (changed, or locked out). */
-function Library({ token, onRejected }: { token: string; onRejected: () => void }) {
+function Library({ scope }: { scope: SoundsScope }) {
   const [sounds, setSounds] = useState<LibrarySound[] | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [usage, setUsage] = useState<{ used: number; quota: number | null } | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [filter, setFilter] = useState<SoundFilter>(NO_FILTER);
 
-  // no-store: listings are cached for a few seconds, the admin wants the truth.
   const fetchAll = () =>
-    fetchLibrary({ cache: 'no-store' }).then(setSounds, () => setLoadError(true));
+    fetchMySounds(scope).then((result) => {
+      if (!result.ok) return setLoadError(LIBRARY_ERROR_TEXT[result.error]);
+      setSounds(result.value.sounds);
+      setUsage({ used: result.value.usedBytes, quota: result.value.quotaBytes });
+    });
   const retry = () => {
-    setLoadError(false);
+    setLoadError(null);
     void fetchAll();
   };
   useEffect(() => {
     void fetchAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- once per scope (remounted)
   }, []);
 
-  /** Applies a change locally, and makes the lobby refetch next time. */
+  /** Applies a change locally, and makes the lobby refetch. */
   const change = (fn: (list: LibrarySound[]) => LibrarySound[]) => {
     setSounds((list) => fn(list ?? []));
     useLibrary.setState({ sounds: null });
   };
+  /** Re-reads the space used (it reloads the whole list: once per batch, not per file). */
+  const refreshUsage = () =>
+    void fetchMySounds(scope).then(
+      (r) => r.ok && setUsage({ used: r.value.usedBytes, quota: r.value.quotaBytes }),
+    );
   const replace = (sound: LibrarySound) =>
     change((list) => list.map((s) => (s.id === sound.id ? sound : s)));
 
@@ -189,8 +126,9 @@ function Library({ token, onRejected }: { token: string; onRejected: () => void 
   return (
     <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)] lg:items-start">
       <UploadCard
-        token={token}
-        onRejected={onRejected}
+        scope={scope}
+        usage={usage}
+        onBatchDone={refreshUsage}
         knownTags={allTags.map(([t]) => t)}
         onAdded={(s) =>
           change((list) =>
@@ -201,13 +139,19 @@ function Library({ token, onRejected }: { token: string; onRejected: () => void 
         }
       />
       <Card
-        title="Library"
+        title={scope === 'library' ? 'Shared library' : 'My sounds'}
         subtitle={sounds ? `${visible.length} of ${sounds.length} sounds` : undefined}
       >
+        {scope === 'mine' && (
+          <p className="mb-3 text-sm text-muted">
+            Only you see them. To play with them, tick “Share my sounds with the room” in a room’s
+            lobby: the host can then pick among them.
+          </p>
+        )}
         <SoundFilters value={filter} onChange={setFilter} tags={allTags} />
         {loadError && (
           <p className="mt-3 flex items-center gap-2 text-sm text-danger" role="alert">
-            {LIBRARY_ERROR_TEXT.NETWORK}
+            {loadError}
             <Button variant="ghost" size="sm" onClick={retry}>
               Retry
             </Button>
@@ -224,10 +168,11 @@ function Library({ token, onRejected }: { token: string; onRejected: () => void 
             <SoundRow
               key={s.id}
               sound={s}
-              token={token}
-              onRejected={onRejected}
               onChanged={replace}
-              onDeleted={() => change((list) => list.filter((x) => x.id !== s.id))}
+              onDeleted={() => {
+                change((list) => list.filter((x) => x.id !== s.id));
+                refreshUsage();
+              }}
             />
           ))}
         </ul>
@@ -237,15 +182,17 @@ function Library({ token, onRejected }: { token: string; onRejected: () => void 
 }
 
 function UploadCard({
-  token,
-  onRejected,
+  scope,
+  usage,
   knownTags,
   onAdded,
+  onBatchDone,
 }: {
-  token: string;
-  onRejected: () => void;
+  scope: SoundsScope;
+  usage: { used: number; quota: number | null } | null;
   knownTags: string[];
   onAdded: (sound: LibrarySound) => void;
+  onBatchDone: () => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [tagText, setTagText] = useState('');
@@ -271,28 +218,38 @@ function UploadCard({
           .replace(/\.[^.]+$/, '')
           .trim()
           .slice(0, 40) || 'Sound';
-      const result = await adminUpload(token, f, label, tags);
-      // Token refused: stop here rather than sending every file to be refused too.
-      if (!result.ok && (result.error === 'UNAUTHORIZED' || result.error === 'RATE_LIMITED')) {
-        setProgress(null);
-        onRejected();
-        return;
-      }
+      const result = await adminUpload(f, label, tags, scope);
       if (result.ok) {
         added++;
         onAdded(result.value);
-      } else {
-        const existing = result.sound ? ` (as “${result.sound.label}”)` : '';
-        problems.push(`${f.name}: ${LIBRARY_ERROR_TEXT[result.error]}${existing}`);
+        continue;
       }
+      const existing = result.sound ? ` (as “${result.sound.label}”)` : '';
+      problems.push(`${f.name}: ${LIBRARY_ERROR_TEXT[result.error]}${existing}`);
+      // The rest would be refused too: stop here.
+      if (['UNAUTHORIZED', 'RATE_LIMITED', 'QUOTA_EXCEEDED'].includes(result.error)) break;
     }
     setProgress(null);
     setReport({ added, problems });
+    onBatchDone();
   };
 
   return (
-    <Card title="Add sounds" className="lg:sticky lg:top-4">
+    <Card title="Add sounds" className="lg:sticky lg:top-16">
       <div className="flex flex-col gap-3">
+        {usage?.quota != null && (
+          <div className="flex flex-col gap-1" data-testid="quota">
+            <span className="text-sm text-muted">
+              {mb(usage.used)} of {mb(usage.quota)} used
+            </span>
+            <div className="h-2 overflow-hidden rounded-full bg-surface-sunken">
+              <div
+                className="h-full rounded-full bg-accent"
+                style={{ width: `${Math.min(100, (usage.used / usage.quota) * 100)}%` }}
+              />
+            </div>
+          </div>
+        )}
         <label className="flex flex-col gap-1.5 text-sm">
           <span className="text-muted">Tags for this batch (comma separated)</span>
           <input
@@ -346,14 +303,10 @@ function UploadCard({
 
 function SoundRow({
   sound,
-  token,
-  onRejected,
   onChanged,
   onDeleted,
 }: {
   sound: LibrarySound;
-  token: string;
-  onRejected: () => void;
   onChanged: (s: LibrarySound) => void;
   onDeleted: () => void;
 }) {
@@ -366,10 +319,9 @@ function SoundRow({
   const save = async (patch: { label?: string; tags?: string[] }) => {
     setBusy(true);
     setError(null);
-    const result = await adminUpdate(token, sound.id, patch);
+    const result = await adminUpdate(sound.id, patch);
     setBusy(false);
     if (result.ok) onChanged(result.value);
-    else if (result.error === 'UNAUTHORIZED') onRejected();
     else {
       setError(LIBRARY_ERROR_TEXT[result.error]);
       setLabel(sound.label);
@@ -390,12 +342,11 @@ function SoundRow({
     if (!sound.tags.includes(tag.data)) void save({ tags: [...sound.tags, tag.data] });
   };
   const remove = async () => {
-    if (!confirm(`Delete “${sound.label}” from the library?`)) return;
+    if (!confirm(`Delete “${sound.label}”?`)) return;
     setBusy(true);
-    const result = await adminDelete(token, sound.id);
+    const result = await adminDelete(sound.id);
     setBusy(false);
     if (result.ok || result.error === 'NOT_FOUND') onDeleted();
-    else if (result.error === 'UNAUTHORIZED') onRejected();
     else setError(LIBRARY_ERROR_TEXT[result.error]);
   };
 
@@ -462,7 +413,7 @@ function SoundRow({
         </button>
         <ErrorText>{error}</ErrorText>
       </div>
-      {editingLines && <LinesEditor sound={sound} token={token} onChanged={onChanged} />}
+      {editingLines && <LinesEditor sound={sound} onChanged={onChanged} />}
     </li>
   );
 }

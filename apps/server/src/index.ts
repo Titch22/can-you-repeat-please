@@ -16,7 +16,7 @@ const firstCode = accounts.firstAccountCode();
 if (firstCode) console.log(`[accounts] no account yet: sign up with the code ${firstCode}`);
 
 const voice = createLiveKitVoice(config.livekit);
-const library = createLibraryClient(config.soundsUrl);
+const library = createLibraryClient(config.soundsUrl, config.soundsSecret);
 const timing = process.env.GAME_FAST === '1' ? FAST_TIMING : DEFAULT_TIMING;
 
 const { server } = createApp({

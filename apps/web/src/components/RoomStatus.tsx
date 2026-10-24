@@ -57,7 +57,7 @@ export function RoomStatus({ room }: { room: RoomState }) {
   const { tone, text } = roomStatus(room, connected);
   const t = TONES[tone];
   return (
-    <div className="sticky top-0 z-20 -mx-4 bg-bg/80 px-4 pt-2 pb-2 backdrop-blur-md">
+    <div className="sticky top-12 z-10 -mx-4 bg-bg/80 px-4 pt-2 pb-2 backdrop-blur-md">
       <p
         role="status"
         data-testid="room-status"

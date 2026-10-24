@@ -28,6 +28,8 @@ export interface Player {
   connected: boolean;
   isSpectator: boolean;
   score: number;
+  /** Logged in and sharing their sounds: the host can pick among them. */
+  sharesSounds: boolean;
 }
 
 export interface SoundRef {
@@ -140,7 +142,8 @@ export type ErrorCode =
   | 'NO_DIALOGUES'
   | 'SERVER_FULL'
   | 'RATE_LIMITED'
-  | 'SPECTATOR';
+  | 'SPECTATOR'
+  | 'NOT_LOGGED_IN';
 
 export type Ack<T = object> = ({ ok: true } & T) | { ok: false; error: ErrorCode };
 
@@ -177,6 +180,7 @@ export type LibraryErrorCode =
   | 'DUPLICATE'
   | 'LENGTH_MISMATCH'
   | 'TRANSCRIPTION_FAILED'
+  | 'QUOTA_EXCEEDED'
   | 'RATE_LIMITED';
 
 /** GET /api/account: who is logged in, and whether sign-up needs a code. */
@@ -195,3 +199,17 @@ export type AccountErrorCode =
   | 'NOT_ADMIN'
   | 'NOT_FOUND'
   | 'RATE_LIMITED';
+
+/** GET /v1/my/sounds: a user's own sounds (or the shared library, for admins), and their quota. */
+export interface MySounds {
+  sounds: LibrarySound[];
+  usedBytes: number;
+  /** Null for the shared library (no quota). */
+  quotaBytes: number | null;
+}
+
+/** GET /api/rooms/:code/shared-sounds: the sounds of the players sharing theirs. */
+export interface SharedSounds {
+  playerId: string;
+  sounds: SoundRef[];
+}

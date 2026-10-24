@@ -58,7 +58,7 @@ export function Lobby({ room }: { room: RoomState }) {
           </div>
         </div>
 
-        <aside className="min-w-0 lg:sticky lg:top-16 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:max-h-[calc(100dvh-5rem)] lg:flex-col">
+        <aside className="min-w-0 lg:sticky lg:top-28 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:flex lg:max-h-[calc(100dvh-8rem)] lg:flex-col">
           <SoundsPanel room={room} meId={meId} amHost={amHost} />
         </aside>
 

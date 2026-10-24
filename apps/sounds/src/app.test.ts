@@ -11,12 +11,22 @@ import {
   type TagCount,
   type TranscriptLanguage,
 } from '@cyrp/shared';
+import { signSoundsToken } from '@cyrp/shared/soundsToken';
 import { createSoundsApp } from './app.js';
 import { importDir } from './importDir.js';
 import { Library, slugify } from './library.js';
 import { toWords } from './transcribe.js';
 
-const TOKEN = 'test-admin-token';
+const SECRET = 'test-sounds-secret';
+const tokenFor = (sub: number, admin = false) =>
+  signSoundsToken({ sub, admin, exp: Date.now() + 3600_000 }, SECRET);
+/** An account admin (user 1): manages the shared library. */
+const TOKEN = tokenFor(1, true);
+/** Two regular users. */
+const ALICE = tokenFor(2);
+const BOB = tokenFor(3);
+/** Small, so the quota test fills it with two 1 s sounds (16 KB each). */
+const QUOTA = 30_000;
 
 /** A playable mono 16-bit PCM WAV of `seconds`; `pitch` makes otherwise identical files differ. */
 function wav(seconds: number, pitch = 440) {
@@ -45,7 +55,7 @@ let dir: string;
 let library: Library;
 let server: Server;
 let base: string;
-let limits: { failedAuth: RateLimiter; upload: RateLimiter };
+let limits: { failedAuth: RateLimiter; upload: RateLimiter; speech: RateLimiter };
 const align = vi.fn(async (_samples: Float32Array, _language: TranscriptLanguage, lines) =>
   (lines as { startMs: number }[]).map((l) => [l.startMs]),
 );
@@ -56,10 +66,15 @@ const transcribe = vi.fn(async (samples: Float32Array, _language: TranscriptLang
 beforeEach(async () => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cyrp-sounds-'));
   library = new Library(dir, 'https://sounds.test');
-  limits = { failedAuth: new RateLimiter(5, 60_000), upload: new RateLimiter(1000, 1) };
+  limits = {
+    failedAuth: new RateLimiter(5, 60_000),
+    upload: new RateLimiter(1000, 1),
+    speech: new RateLimiter(1000, 1),
+  };
   const app = createSoundsApp({
     library,
-    adminToken: TOKEN,
+    secret: SECRET,
+    quotaBytes: QUOTA,
     clientOrigin: ['http://game.test'],
     transcribe,
     align,
@@ -76,8 +91,9 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
-const upload = (body: Buffer, query: string, token = TOKEN) =>
-  fetch(`${base}/v1/sounds?${query}`, {
+/** Uploads to the shared library (as the admin) unless `scope` says otherwise. */
+const upload = (body: Buffer, query: string, token = TOKEN, scope = 'library') =>
+  fetch(`${base}/v1/sounds?${query}&scope=${scope}`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
     body: new Uint8Array(body),
@@ -88,7 +104,7 @@ const list = async (query = '') => json<LibrarySound[]>(await fetch(`${base}/v1/
 describe('sounds API', () => {
   it('locks an address out after repeated wrong tokens', async () => {
     const check = (token: string) =>
-      fetch(`${base}/v1/admin`, { headers: { Authorization: `Bearer ${token}` } });
+      fetch(`${base}/v1/my/sounds`, { headers: { Authorization: `Bearer ${token}` } });
     expect((await check(TOKEN)).status).toBe(200);
     for (let i = 0; i < 5; i++) expect((await check('nope')).status).toBe(401);
     // Even the right token is refused from that address for a while.
@@ -103,7 +119,7 @@ describe('sounds API', () => {
     expect(res.headers.get('x-powered-by')).toBeNull();
   });
 
-  it('refuses writes without the admin token', async () => {
+  it('refuses writes without a valid token', async () => {
     expect((await upload(wav(1), 'label=A', 'wrong')).status).toBe(401);
     const noAuth = await fetch(`${base}/v1/sounds?label=A`, {
       method: 'POST',
@@ -111,10 +127,9 @@ describe('sounds API', () => {
     });
     expect(noAuth.status).toBe(401);
     expect((await fetch(`${base}/v1/sounds/x`, { method: 'DELETE' })).status).toBe(401);
-    const check = (token: string) =>
-      fetch(`${base}/v1/admin`, { headers: { Authorization: `Bearer ${token}` } });
-    expect((await check('wrong')).status).toBe(401);
-    expect(await (await check(TOKEN)).json()).toEqual({ ok: true, sounds: 0 });
+    // Signed with another secret.
+    const forged = signSoundsToken({ sub: 1, admin: true, exp: Date.now() + 60_000 }, 'other');
+    expect((await upload(wav(1), 'label=A', forged)).status).toBe(401);
     expect(await list()).toEqual([]);
   });
 
@@ -294,6 +309,60 @@ describe('sounds API', () => {
     expect(files()).toBe(3);
     await fetch(`${base}/v1/sounds/${scene.id}`, { method: 'DELETE', headers: auth });
     expect(files()).toBe(1);
+  });
+});
+
+describe('user sounds', () => {
+  const mine = async (token: string, scope = 'mine') =>
+    (await fetch(`${base}/v1/my/sounds?scope=${scope}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    }).then((r) => r.json())) as { sounds: LibrarySound[]; usedBytes: number; quotaBytes: number };
+  const lookup = (ids: string[], owners: number[], token?: string) =>
+    fetch(`${base}/v1/sounds/lookup`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ ids, owners }),
+    }).then((r) => json<LibrarySound[]>(r));
+
+  it('keeps each user\u2019s sounds to themselves, within their quota', async () => {
+    const own = await json<LibrarySound>(await upload(wav(1, 300), 'label=Mine', ALICE, 'mine'));
+    expect(await mine(ALICE)).toMatchObject({
+      sounds: [{ id: own.id }],
+      usedBytes: wav(1).length,
+      quotaBytes: QUOTA,
+    });
+    // Not public: not listed, not readable, not in a lookup by anyone but the game server.
+    expect(await list()).toEqual([]);
+    expect((await fetch(`${base}/v1/sounds/${own.id}`)).status).toBe(404);
+    expect(await lookup([own.id], [2])).toEqual([]);
+    expect(await lookup([own.id], [2], BOB)).toEqual([]);
+    expect(await lookup([own.id], [2], tokenFor(0, true))).toMatchObject([{ id: own.id }]);
+    expect(await lookup([own.id], [2], TOKEN)).toEqual([]); // an account admin isn't the game
+    expect(await lookup([own.id], [3], tokenFor(0, true))).toEqual([]);
+
+    // Others can't change or delete it (it looks like it doesn't exist), nor see it.
+    const del = (token: string) =>
+      fetch(`${base}/v1/sounds/${own.id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    expect((await del(BOB)).status).toBe(404);
+    expect((await del(TOKEN)).status).toBe(404); // admins manage the library, not users' sounds
+    expect((await mine(BOB)).sounds).toEqual([]);
+
+    // Users can't add to the shared library.
+    expect((await upload(wav(1, 350), 'label=Lib', ALICE, 'library')).status).toBe(401);
+
+    // The quota: a second 16 KB sound doesn't fit in 30 KB; deleting frees the space.
+    const full = await upload(wav(1, 400), 'label=Two', ALICE, 'mine');
+    expect([full.status, (await full.json()).error]).toEqual([413, 'QUOTA_EXCEEDED']);
+    expect((await del(ALICE)).status).toBe(200);
+    expect((await upload(wav(1, 400), 'label=Two', ALICE, 'mine')).status).toBe(201);
+    // The same file as another user's (or the library's) isn't a duplicate.
+    expect((await upload(wav(1, 400), 'label=Two', BOB, 'mine')).status).toBe(201);
   });
 });
 

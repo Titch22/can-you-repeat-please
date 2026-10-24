@@ -56,11 +56,14 @@ export const DEFAULT_SETTINGS: z.infer<typeof SettingsSchema> = {
   selectedSoundIds: [],
   extraRecordMs: 1000,
   votingMs: 20_000,
-  replayReference: true,
+  replayReference: false,
 };
 
 // Client → server payloads
-export const RoomCreatePayload = z.object({ nickname: NicknameSchema, color: ColorSchema });
+export const RoomCreatePayload = z.object({
+  nickname: NicknameSchema,
+  color: ColorSchema,
+});
 export const RoomJoinPayload = z.object({
   code: RoomCodeSchema,
   nickname: NicknameSchema,
@@ -70,6 +73,8 @@ export const RoomResumePayload = z.object({ code: RoomCodeSchema, sessionToken: 
 export const UpdateSettingsPayload = SettingsSchema.partial();
 export const KickPayload = z.object({ playerId: z.string() });
 export const DeleteSoundPayload = z.object({ soundId: z.string() });
+/** Logged-in players: share (or stop sharing) their own sounds, so the host can pick them. */
+export const ShareSoundsPayload = z.object({ share: z.boolean() });
 export const VotePayload = z.object({
   clipIds: z.array(z.string()).max(MAX_VOTES_PER_PLAYER),
 });
@@ -189,7 +194,11 @@ export const AlignRequestSchema = z.object({
 });
 
 /** POST /v1/sounds/lookup */
-export const LibraryLookupSchema = z.object({ ids: z.array(z.string().max(100)).max(2000) });
+export const LibraryLookupSchema = z.object({
+  ids: z.array(z.string().max(100)).max(2000),
+  /** Users whose own sounds may be included (the game server only: players sharing theirs). */
+  owners: z.array(z.number().int()).max(50).default([]),
+});
 
 // Accounts (game server, /api/account)
 

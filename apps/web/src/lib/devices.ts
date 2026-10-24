@@ -2,22 +2,55 @@ import { create } from 'zustand';
 
 const KEY = 'cyrp.audioInput';
 const BOOST_KEY = 'cyrp.micBoost';
+const VOLUME_KEYS = { soundsVolume: 'cyrp.soundsVolume', voicesVolume: 'cyrp.voicesVolume' };
 export const MIN_MIC_BOOST = 1;
 export const MAX_MIC_BOOST = 4;
 
 /**
- * The player's microphones, which one they picked (null = the browser's default), and how
- * much their voice is amplified for the others (1–4).
+ * The player's microphones, which one they picked (null = the browser's default), how much
+ * their voice is amplified for the others (1–4), and how loud they hear the game sounds and the
+ * other players' voices (0–1, each on their own).
  */
 export const useDevices = create<{
   inputs: MediaDeviceInfo[];
   inputId: string | null;
   micBoost: number;
+  soundsVolume: number;
+  voicesVolume: number;
 }>(() => ({
   inputs: [],
   inputId: savedInputId(),
   micBoost: savedMicBoost(),
+  soundsVolume: savedVolume('soundsVolume'),
+  voicesVolume: savedVolume('voicesVolume'),
 }));
+
+type VolumeKind = keyof typeof VOLUME_KEYS;
+
+/** A volume made safe: within [0, 1], full volume otherwise. */
+export function clampVolume(value: unknown) {
+  const n = typeof value === 'string' && value !== '' ? Number(value) : value;
+  return typeof n === 'number' && Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 1;
+}
+
+function savedVolume(kind: VolumeKind) {
+  try {
+    return clampVolume(localStorage.getItem(VOLUME_KEYS[kind]));
+  } catch {
+    return 1;
+  }
+}
+
+/** Sets (and remembers on this device) the game sounds' or the voices' volume. */
+export function setVolume(kind: VolumeKind, value: number) {
+  const volume = clampVolume(value);
+  try {
+    localStorage.setItem(VOLUME_KEYS[kind], String(volume));
+  } catch {
+    // not remembered, that's fine
+  }
+  useDevices.setState({ [kind]: volume });
+}
 
 /** A boost value made safe: a number within [1, 4], 1 otherwise. */
 export function clampBoost(value: unknown) {

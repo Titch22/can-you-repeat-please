@@ -46,7 +46,7 @@ test('teams mode: a pair and a solo player dub a dialogue and vote for each othe
   await expect(alice.getByTestId('recorder')).toBeVisible({ timeout: 30_000 });
   await expect(alice.locator('[data-status="recording"]')).toBeVisible({ timeout: 15_000 });
 
-  // Playback: the original, then the two teams.
+  // Playback: the two teams (the original isn't replayed by default).
   for (const page of pages) {
     await expect(page.getByTestId('playback')).toContainText('of 2', { timeout: 45_000 });
   }

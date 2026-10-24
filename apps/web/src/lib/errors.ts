@@ -24,6 +24,7 @@ const MESSAGES: Record<ErrorCode, string> = {
   RATE_LIMITED: 'Slow down! Too many attempts, wait a minute and try again.',
   LIBRARY_UNAVAILABLE: 'The sound library is unavailable right now. Try again in a moment.',
   SPECTATOR: 'You’re watching this game; you’ll play in the next one.',
+  NOT_LOGGED_IN: 'Log in to share your sounds.',
 };
 
 export const errorMessage = (code: ErrorCode) => MESSAGES[code] ?? MESSAGES.INTERNAL;

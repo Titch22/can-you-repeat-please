@@ -36,12 +36,20 @@ function setup(names = ['Alice', 'Bob', 'Carol']) {
   // The library holds s1 and s2, and d1: a dialogue (Teams mode).
   const library = {
     available: true,
-    resolve: vi.fn(async (ids: string[]) => {
+    // User 42's own sound u1 only resolves when they share theirs.
+    resolve: vi.fn(async (ids: string[], owners: number[] = []) => {
       if (!library.available) throw new RoomError('LIBRARY_UNAVAILABLE');
       return ids.flatMap((x) =>
-        x === 's1' || x === 's2' ? [sound(`lib:${x}`)] : x === 'd1' ? [dialogue] : [],
+        x === 's1' || x === 's2'
+          ? [sound(`lib:${x}`)]
+          : x === 'd1'
+            ? [dialogue]
+            : x === 'u1' && owners.includes(42)
+              ? [sound('lib:u1')]
+              : [],
       );
     }),
+    userSounds: vi.fn(async () => []),
   };
   game = new GameRunner({
     rooms,
@@ -89,6 +97,7 @@ describe('GameRunner', () => {
   it('plays a full game: rounds, mute while recording, playback, votes, scores, back to lobby', async () => {
     const { rooms, game, room, voice, discardRecordings, id } = setup();
     room.settings.rounds = 2;
+    room.settings.replayReference = true;
     await game.start(room.code, id('Alice'));
     expect(room.phase).toBe('ROUND_INTRO');
     expect(rooms.toState(room, id('Bob')).round).toBe(1);
@@ -231,8 +240,30 @@ describe('GameRunner', () => {
     room.settings.rounds = 6;
     room.settings.selectedSoundIds = ['lib:s2', 'lib:gone', 'mine'];
     await game.start(room.code, id('Alice'));
-    expect(library.resolve).toHaveBeenCalledWith(['s2', 'gone']);
+    expect(library.resolve).toHaveBeenCalledWith(['s2', 'gone'], []);
     expect(new Set(room.game!.sounds.map((s) => s.id))).toEqual(new Set(['lib:s2', 'mine']));
+  });
+
+  it('can pick the own sounds of players sharing theirs, while they are in the room', async () => {
+    const { rooms, game, room, id, library } = setup(['Alice', 'Bob']);
+    const carol = rooms.join(room.code, 'Carol', '#0000ff', 's-Carol').player;
+    rooms.setSharing(room.code, carol.id, 42, true);
+    // Logged in but not sharing: their sounds stay out.
+    const dave = rooms.join(room.code, 'Dave', '#0000ff', 's-Dave').player;
+    rooms.setSharing(room.code, dave.id, 43, false);
+    room.settings.selectedSoundIds = ['lib:u1'];
+    await game.start(room.code, id('Alice'));
+    expect(library.resolve).toHaveBeenLastCalledWith(['u1'], [42]);
+    expect(room.game!.sounds.map((s) => s.id)).toEqual([
+      'lib:u1',
+      'lib:u1',
+      'lib:u1',
+      'lib:u1',
+      'lib:u1',
+    ]);
+    expect(
+      rooms.toState(room, id('Alice')).players.find((p) => p.id === carol.id)?.sharesSounds,
+    ).toBe(true);
   });
 
   it('refuses to start when the ticked library sounds are gone or the library is down', async () => {
@@ -252,6 +283,7 @@ describe('GameRunner', () => {
     const { rooms, game, room, id } = setup(['Alice', 'Bob', 'Carol', 'Dave']);
     room.settings.mode = 'teams';
     room.settings.rounds = 1;
+    room.settings.replayReference = true;
     room.settings.selectedSoundIds = ['lib:s1', 'lib:d1']; // s1 isn't a dialogue
     await game.start(room.code, id('Alice'));
     expect(room.game!.sounds.map((s) => s.id)).toEqual(['lib:d1']);

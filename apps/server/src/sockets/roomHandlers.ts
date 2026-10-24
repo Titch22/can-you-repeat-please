@@ -7,6 +7,7 @@ import {
   RoomJoinPayload,
   RoomResumePayload,
   DeleteSoundPayload,
+  ShareSoundsPayload,
   VotePayload,
   SetVoiceMutedPayload,
   TimeSyncPayload,
@@ -56,6 +57,8 @@ export interface HandlerDeps {
   /** Registers debug-only events. */
   debug: boolean;
   limits: Limits;
+  /** The account logged in with this Cookie header (read at the socket's handshake). */
+  accountOf(cookie: string | undefined): { id: number } | null;
 }
 
 export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: HandlerDeps) {
@@ -142,6 +145,16 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
       handler(KickPayload, ({ playerId: targetId }) => {
         const { code, playerId } = membership();
         rooms.kick(code, playerId, targetId);
+      }),
+    );
+
+    socket.on(
+      'room:shareSounds',
+      handler(ShareSoundsPayload, ({ share }) => {
+        const { code, playerId } = membership();
+        // Who is logged in when the socket connected (the page reconnects it on login/logout).
+        const userId = deps.accountOf(socket.handshake.headers.cookie)?.id ?? null;
+        rooms.setSharing(code, playerId, userId, share);
       }),
     );
 

@@ -8,7 +8,15 @@ import {
   type RoomState,
   type SoundRef,
 } from '@cyrp/shared';
-import { deleteSound, updateSettings, uploadSound } from '../lib/actions';
+import { Link } from 'react-router';
+import { useAccount } from '../lib/account';
+import {
+  deleteSound,
+  fetchSharedSounds,
+  shareSounds,
+  updateSettings,
+  uploadSound,
+} from '../lib/actions';
 import { replay } from '../lib/audio';
 import { errorMessage } from '../lib/errors';
 import { useLibrary } from '../lib/library';
@@ -23,10 +31,13 @@ import {
 } from './SoundFilters';
 import { Button, Card, inputClass } from './ui';
 
+/** A sound shared by a player (their own sounds, from /sounds): `sharedBy` is their id. */
+type Listed = SoundRef & { sharedBy?: string };
+
 /**
- * The sounds a game can use: the shared library (filtered by tags, length and name) plus this
- * room's uploads, each with a checkbox deciding whether it can come up (host only). Anyone can
- * upload; uploads vanish with the room.
+ * The sounds a game can use: the shared library (filtered by tags, length and name), the own
+ * sounds of the players sharing theirs, and this room's uploads, each with a checkbox deciding
+ * whether it can come up (host only). Anyone can upload; uploads vanish with the room.
  */
 export function SoundsPanel({
   room,
@@ -43,6 +54,26 @@ export function SoundsPanel({
     void useLibrary.getState().load();
   }, []);
 
+  // Players' shared sounds: reloaded when someone starts or stops sharing (joins, leaves).
+  const sharingKey = room.players
+    .filter((p) => p.sharesSounds)
+    .map((p) => p.id)
+    .join('|');
+  const [shared, setShared] = useState<Listed[]>([]);
+  useEffect(() => {
+    let live = true;
+    void fetchSharedSounds(room.code).then(
+      (list) =>
+        live &&
+        setShared(
+          list.flatMap((s) => s.sounds.map((sound) => ({ ...sound, sharedBy: s.playerId }))),
+        ),
+    );
+    return () => {
+      live = false;
+    };
+  }, [room.code, sharingKey]);
+
   // Optimistic selection: the checkbox flips right away. It's only trusted while the server's
   // selection is still the one it was based on; the next server update replaces it.
   const serverKey = room.settings.selectedSoundIds.join('|');
@@ -57,9 +88,9 @@ export function SoundsPanel({
   // Teams mode only plays dialogues (library sounds tagged "team" with their lines).
   const teamsMode = room.settings.mode === 'teams';
   const uploads = teamsMode ? [] : room.sounds.filter((s) => s.uploadedBy);
-  const all: SoundRef[] = teamsMode
-    ? (library ?? []).filter(isDialogue)
-    : [...(library ?? []), ...uploads];
+  const all: Listed[] = teamsMode
+    ? [...(library ?? []), ...shared].filter(isDialogue)
+    : [...(library ?? []), ...shared, ...uploads];
   const tagFilterOn = filter.tags.length > 0 || roomOnly;
   const visible = all.filter((s) => {
     if (!matchesBasics(s, filter)) return false;
@@ -131,12 +162,17 @@ export function SoundsPanel({
       ) : (
         <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_ROOM - uploads.length} />
       )}
+      <ShareMySounds sharing={!!room.players.find((p) => p.id === meId)?.sharesSounds} />
 
       <div className="mt-4">
         <SoundFilters
           value={filter}
           onChange={setFilter}
-          tags={tagCounts(teamsMode ? all.map((s) => ({ tags: s.tags ?? [] })) : (library ?? []))}
+          tags={tagCounts(
+            (teamsMode ? all : [...(library ?? []), ...shared]).map((s) => ({
+              tags: s.tags ?? [],
+            })),
+          )}
           extraChips={
             uploads.length > 0
               ? [
@@ -186,7 +222,7 @@ export function SoundsPanel({
       </ul>
       {library !== null && teamsMode && all.length === 0 ? (
         <p className="mt-2 text-sm text-muted">
-          No dialogue in the library yet. In /admin, tag a scene “team” and mark its lines.
+          No dialogue in the library yet. In /sounds, tag a scene “team” and mark its lines.
         </p>
       ) : (
         library !== null &&
@@ -208,16 +244,17 @@ function SoundTile({
   canDelete,
   onToggle,
 }: {
-  sound: SoundRef & { tags?: string[] };
+  sound: Listed;
   room: RoomState;
   checked: boolean;
   canToggle: boolean;
   canDelete: boolean;
   onToggle: () => void;
 }) {
-  const uploader = sound.uploadedBy
-    ? (room.players.find((p) => p.id === sound.uploadedBy)?.nickname ?? 'someone who left')
-    : null;
+  const nameOf = (id: string) =>
+    room.players.find((p) => p.id === id)?.nickname ?? 'someone who left';
+  const uploader = sound.uploadedBy ? nameOf(sound.uploadedBy) : null;
+  const sharer = sound.sharedBy ? nameOf(sound.sharedBy) : null;
   // The whole tile toggles the sound (host only); its own buttons keep their action.
   const onTileClick = (e: MouseEvent<HTMLLIElement>) => {
     if (!canToggle || (e.target as HTMLElement).closest('button, input, a')) return;
@@ -250,8 +287,9 @@ function SoundTile({
           {sound.label}
         </span>
         <span className="block truncate text-xs text-subtle">
-          {(sound.durationMs / 1000).toFixed(1)}s
-          {uploader ? ` · by ${uploader}` : sound.tags?.length ? ` · ${sound.tags.join(', ')}` : ''}
+          {(sound.durationMs / 1000).toFixed(1)}s{uploader ? ` · by ${uploader}` : ''}
+          {sharer ? ` · ${sharer}’s` : ''}
+          {!uploader && sound.tags?.length ? ` · ${sound.tags.join(', ')}` : ''}
           {sound.lines?.length ? ` · ${sound.lines.length} lines` : ''}
         </span>
       </span>
@@ -406,6 +444,39 @@ function UploadForm({ code, remaining }: { code: string; remaining: number }) {
             <li key={i}>{e}</li>
           ))}
         </ul>
+      )}
+    </div>
+  );
+}
+
+/** Logged-in players: put their own sounds (/sounds) in this list, for the host to pick. */
+function ShareMySounds({ sharing }: { sharing: boolean }) {
+  const user = useAccount((s) => s.user);
+  const [error, setError] = useState<string | null>(null);
+  if (!user) return null;
+  const toggle = async (share: boolean) => {
+    setError(null);
+    const ack = await shareSounds(share);
+    if (!ack.ok) setError(errorMessage(ack.error));
+  };
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-control border border-line bg-surface-sunken/40 px-3 py-2 text-sm">
+      <label className="flex cursor-pointer items-center gap-2 font-semibold">
+        <input
+          type="checkbox"
+          checked={sharing}
+          onChange={(e) => void toggle(e.target.checked)}
+          className="size-4"
+        />
+        Share my sounds with the room
+      </label>
+      <Link to="/sounds" className="text-muted underline underline-offset-2 hover:text-ink">
+        manage my sounds
+      </Link>
+      {error && (
+        <span className="w-full text-danger" role="alert">
+          {error}
+        </span>
       )}
     </div>
   );

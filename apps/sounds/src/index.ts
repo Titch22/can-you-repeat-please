@@ -8,7 +8,8 @@ const library = new Library(config.dataDir, config.publicUrl);
 
 const app = createSoundsApp({
   library,
-  adminToken: config.adminToken,
+  secret: config.secret,
+  quotaBytes: config.quotaBytes,
   clientOrigin: config.clientOrigin,
   transcribe: createTranscriber(config.dataDir),
   align: createAligner(config.dataDir),

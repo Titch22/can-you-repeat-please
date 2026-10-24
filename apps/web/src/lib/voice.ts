@@ -62,7 +62,8 @@ export const useVoice = create<VoiceStore>(() => ({
 
 function effectiveVolume(identity: string) {
   const { volumes, ducked } = useVoice.getState();
-  return (volumes[identity] ?? 1) * (ducked ? DUCKED_FACTOR : 1);
+  const { voicesVolume } = useDevices.getState();
+  return (volumes[identity] ?? 1) * voicesVolume * (ducked ? DUCKED_FACTOR : 1);
 }
 
 function applyVolumes() {
@@ -126,6 +127,7 @@ useDevices.subscribe((state, prev) => {
   if (state.micBoost !== prev.micBoost && boost) {
     boost.gain.gain.setTargetAtTime(state.micBoost, audioContext().currentTime, 0.02);
   }
+  if (state.voicesVolume !== prev.voicesVolume) applyVolumes();
 });
 
 /** Bumped on every connect/disconnect so a stale async connect can tell it lost the race. */

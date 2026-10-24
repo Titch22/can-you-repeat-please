@@ -1,4 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
+  // Node types for soundsToken.ts (server-only subpath); the rest must stay browser-safe.
+  "compilerOptions": { "types": ["node"] },
   "include": ["src"]
 }

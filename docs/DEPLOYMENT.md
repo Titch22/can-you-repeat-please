@@ -73,7 +73,7 @@ VOICE_DOMAIN=voice.yourdomain.com
 SOUNDS_DOMAIN=sounds.yourdomain.com
 LIVEKIT_API_KEY=cyrp3f9a1c2b7d4e        # echo "cyrp$(openssl rand -hex 6)"
 LIVEKIT_API_SECRET=...                  # openssl rand -hex 32
-SOUNDS_ADMIN_TOKEN=...                  # openssl rand -hex 24
+SOUNDS_SECRET=...                       # openssl rand -hex 24
 ```
 
 `deploy/.env` holds secrets: it is git-ignored, so never commit it.
@@ -114,7 +114,7 @@ certbot adds the HTTPS config and the HTTP → HTTPS redirect, and renews the ce
 
 ## Managing the sound library
 
-- **Admin page:** `https://game.yourdomain.com/admin`, unlocked with `SOUNDS_ADMIN_TOKEN`. Upload several files at once with tags, rename, retag and delete sounds.
+- **`/sounds`** (`https://game.yourdomain.com/sounds`), for any logged-in user: their own sounds (upload several files at once with tags, rename, retag, delete, dialogue lines), up to `USER_SOUNDS_QUOTA_MB` each (default 200 MB, files as uploaded). They're private: a player shares them with a room by ticking "Share my sounds with the room" in the room's lobby, and the host can then pick among them. Admins (`ADMIN_USERNAMES`) also manage the **shared library** there, which every room can use (no quota). "Suggest text" / "Align words" are limited to 20 per user per hour.
 - **Bulk import from the server** (a folder of audio files, named after their files; an optional `manifest.json` `{ "sounds": [{ "id", "file", "label" }] }` sets ids and labels):
 
   ```bash
@@ -156,10 +156,14 @@ certbot adds the HTTPS config and the HTTP → HTTPS redirect, and renews the ce
 Installs from before the library need, once:
 
 1. A DNS record for `sounds.<your domain>`.
-2. Two new lines in `deploy/.env`: `SOUNDS_DOMAIN=sounds.yourdomain.com` and `SOUNDS_ADMIN_TOKEN=$(openssl rand -hex 24)`. Compose refuses to start without them.
+2. Two new lines in `deploy/.env`: `SOUNDS_DOMAIN=sounds.yourdomain.com` and `SOUNDS_SECRET=$(openssl rand -hex 24)`. Compose refuses to start without them.
 3. The new nginx blocks from `deploy/nginx.conf.example`: the `proxy_cache_path` line at the top and the `sounds.example.com` server. Then `sudo nginx -t && sudo systemctl reload nginx` and `sudo certbot --nginx -d sounds.yourdomain.com`.
 4. `docker compose up -d --build`, as for any update.
-5. Optional, but recommended: copy the `limit_req_zone` lines and the `location /api/` and `location /v1/` blocks of the updated `deploy/nginx.conf.example` into your nginx site (rate limits, and an optional allowlist for admin writes). The web app is rebuilt with the library's URL baked in. The library starts empty: fill it from `/admin` (or with the import command above).
+5. Optional, but recommended: copy the `limit_req_zone` lines and the `location /api/` and `location /v1/` blocks of the updated `deploy/nginx.conf.example` into your nginx site (rate limits, and an optional allowlist for admin writes). The web app is rebuilt with the library's URL baked in. The library starts empty: fill it from `/sounds` as an admin (or with the import command above).
+
+## Upgrading to user sounds
+
+`SOUNDS_ADMIN_TOKEN` is gone: the library is now managed from `/sounds` by account admins (`ADMIN_USERNAMES`). In `deploy/.env`, replace the `SOUNDS_ADMIN_TOKEN=` line with `SOUNDS_SECRET=$(openssl rand -hex 24)` (compose refuses to start without it), optionally set `USER_SOUNDS_QUOTA_MB`, then `docker compose up -d --build`. Existing sounds become the shared library.
 
 ## Updating
 

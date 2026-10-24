@@ -54,7 +54,7 @@ export function VoiceBar({
           icon={<SlidersIcon className="size-4" />}
           className={settingsOpen ? 'bg-surface-raised text-ink' : ''}
         >
-          Mic settings
+          Audio settings
         </Button>
         <Button
           variant={micWanted ? 'secondary' : 'danger'}

@@ -1,13 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router';
-import { Logo } from '../components/Logo';
+import { Navigate } from 'react-router';
 import { Badge, Button, Card, ErrorText, inputClass, Page } from '../components/ui';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
-import { ACCOUNT_ERROR_TEXT, changePassword, logout, useAccount } from '../lib/account';
+import { ACCOUNT_ERROR_TEXT, changePassword, useAccount } from '../lib/account';
 
-/** The logged-in player's own page: password change and log out (admins: the account tools). */
+/** The logged-in player's own page: their name, and changing their password. */
 export function AccountPage() {
-  const navigate = useNavigate();
   const { user, loaded } = useAccount();
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -61,33 +59,12 @@ export function AccountPage() {
   return (
     <Page>
       <div className="m-auto flex w-full max-w-md animate-enter flex-col items-center gap-6">
-        <Link to="/" aria-label="Home">
-          <Logo size="sm" />
-        </Link>
         <Card
           className="w-full"
           title={user.username}
           subtitle={user.isAdmin ? <Badge>admin</Badge> : undefined}
-          actions={
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => void logout().then(() => navigate('/'))}
-            >
-              Log out
-            </Button>
-          }
         >
-          {user.isAdmin && (
-            <Link
-              to="/admin/accounts"
-              className="text-sm font-semibold text-accent underline underline-offset-2"
-            >
-              Manage accounts and sign-up codes
-            </Link>
-          )}
-        </Card>
-        <Card className="w-full" title="Change your password">
+          <h3 className="mb-3 font-display font-bold">Change your password</h3>
           <form onSubmit={onChange} className="flex flex-col gap-4">
             {field('Current password', oldPassword, setOldPassword, 'current-password')}
             {field('New password (8+ characters)', newPassword, setNewPassword, 'new-password')}
@@ -104,9 +81,6 @@ export function AccountPage() {
             )}
           </form>
         </Card>
-        <Link to="/" className="text-sm text-muted underline underline-offset-2 hover:text-ink">
-          Back to home
-        </Link>
       </div>
     </Page>
   );

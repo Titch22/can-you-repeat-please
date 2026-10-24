@@ -51,7 +51,7 @@ test('pick another microphone without dropping voice', async ({ newPlayer, brows
   await enter(bob, 'Bob', code);
   expect(await micRequests(alice)).toBe(1);
 
-  await alice.getByRole('button', { name: 'Mic settings' }).click();
+  await alice.getByRole('button', { name: 'Audio settings' }).click();
   const select = alice.getByLabel('Microphone');
   const options = select.locator('option');
   // "Browser default" + at least one real mic, with labels (the mic is granted).
@@ -89,7 +89,7 @@ test('mic boost is saved; listeners can raise a voice to 300%', async ({ newPlay
   await enter(bob, 'Bob', code);
 
   // Sender side: the boost is remembered across visits.
-  await alice.getByRole('button', { name: 'Mic settings' }).click();
+  await alice.getByRole('button', { name: 'Audio settings' }).click();
   await alice.getByLabel('Mic boost').fill('2.5');
   await expect(alice.getByTestId('mic-boost-value')).toHaveText('250%');
   await alice.reload();

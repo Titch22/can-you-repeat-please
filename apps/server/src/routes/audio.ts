@@ -6,6 +6,7 @@ import {
   MAX_UPLOAD_BYTES,
   MIN_CUSTOM_SOUND_MS,
   SoundLabelSchema,
+  type SharedSounds,
 } from '@cyrp/shared';
 import { measureDurationMs, sniffAudio } from '@cyrp/audio';
 import type { AudioStorage } from '../audio/storage.js';
@@ -13,6 +14,7 @@ import type { GameRunner } from '../game/GameRunner.js';
 import { clipUrl } from '../game/state.js';
 import { RoomError, type RoomManager } from '../rooms/RoomManager.js';
 import type { Limits } from '../limits.js';
+import type { LibraryClient } from '../sounds/library.js';
 import { requireSession, type SessionLocals } from './auth.js';
 
 const STATUS: Partial<Record<string, number>> = {
@@ -25,6 +27,7 @@ const STATUS: Partial<Record<string, number>> = {
   FILE_TOO_LARGE: 413,
   RATE_LIMITED: 429,
   SERVER_FULL: 507,
+  LIBRARY_UNAVAILABLE: 503,
 };
 
 export function audioRoutes(
@@ -32,6 +35,7 @@ export function audioRoutes(
   game: GameRunner,
   storage: AudioStorage,
   limits: Limits,
+  library: LibraryClient,
 ) {
   const router = Router();
   const uploadLimit: RequestHandler = (req, _res, next) => {
@@ -111,6 +115,16 @@ export function audioRoutes(
       res.json(sound);
     },
   );
+
+  // The sounds of the players sharing theirs (logged in, "share my sounds" ticked when joining).
+  router.get('/api/rooms/:code/shared-sounds', requireSession(rooms), async (_req, res) => {
+    const { room } = res.locals as SessionLocals;
+    const sharing = room.players.filter((p) => p.sharesSounds && p.userId !== null);
+    const shared: SharedSounds[] = await Promise.all(
+      sharing.map(async (p) => ({ playerId: p.id, sounds: await library.userSounds(p.userId!) })),
+    );
+    res.json(shared);
+  });
 
   router.get('/api/rooms/:code/audio/:fileId', requireSession(rooms), (req, res) => {
     const { room } = res.locals as SessionLocals;

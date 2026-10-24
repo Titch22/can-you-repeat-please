@@ -31,6 +31,10 @@ export interface ServerPlayer {
   isSpectator: boolean;
   score: number;
   graceTimer: ReturnType<typeof setTimeout> | null;
+  /** The account the player is logged in with, if any. */
+  userId: number | null;
+  /** Logged in and sharing their sounds with the room (the host may pick among them). */
+  sharesSounds: boolean;
 }
 
 export interface Room {
@@ -213,6 +217,20 @@ export class RoomManager {
     return sound;
   }
 
+  /**
+   * Shares (or stops sharing) the player's own sounds with the room. `userId`: the account
+   * they're logged in with now; sharing needs one.
+   */
+  setSharing(code: string, playerId: string, userId: number | null, share: boolean) {
+    const room = this.getOrThrow(code);
+    const player = room.players.find((p) => p.id === playerId);
+    if (!player) throw new RoomError('ROOM_NOT_FOUND');
+    if (share && userId === null) throw new RoomError('NOT_LOGGED_IN');
+    player.userId = userId;
+    player.sharesSounds = share;
+    this.touch(room);
+  }
+
   requireHost(code: string, playerId: string) {
     this.assertHost(this.getOrThrow(code), playerId);
   }
@@ -252,6 +270,7 @@ export class RoomManager {
         connected: p.socketId !== null,
         isSpectator: p.isSpectator,
         score: p.score,
+        sharesSounds: p.sharesSounds,
       })),
       settings: room.settings,
       sounds: room.customSounds,
@@ -318,6 +337,8 @@ export class RoomManager {
       isSpectator,
       score: 0,
       graceTimer: null,
+      userId: null,
+      sharesSounds: false,
     } satisfies ServerPlayer;
   }
 

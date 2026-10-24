@@ -4,10 +4,12 @@ import {
   type LibraryErrorCode,
   type LibrarySound,
   type LibrarySoundPatch,
+  type MySounds,
   type SoundRef,
   type TranscriptLanguage,
   type TranscriptWord,
 } from '@cyrp/shared';
+import { soundsToken } from './account';
 
 /**
  * The sound library service (apps/sounds). In development the web dev server proxies
@@ -44,20 +46,16 @@ export const useLibrary = create<LibraryStore>((set) => ({
   },
 }));
 
-// ── Admin ───────────────────────────────────────────────────────────────────────
+// ── The logged-in user's sounds (and the shared library, for admins) ─────────────────
 
 export type AdminResult<T> =
   { ok: true; value: T } | { ok: false; error: LibraryErrorCode | 'NETWORK'; sound?: LibrarySound };
 
-async function adminCall<T>(
-  token: string,
-  path: string,
-  init: RequestInit,
-): Promise<AdminResult<T>> {
+async function adminCall<T>(path: string, init: RequestInit): Promise<AdminResult<T>> {
   try {
     const res = await fetch(`${SOUNDS_URL}${path}`, {
       ...init,
-      headers: { ...init.headers, Authorization: `Bearer ${token}` },
+      headers: { ...init.headers, Authorization: `Bearer ${await soundsToken()}` },
     });
     const body = (await res.json().catch(() => ({}))) as {
       error?: LibraryErrorCode;
@@ -74,33 +72,35 @@ async function adminCall<T>(
   }
 }
 
-export const adminUpload = (token: string, file: Blob, label: string, tags: string[]) => {
-  const query = new URLSearchParams({ label });
+/** "mine": the user's own sounds; "library": the shared library (admins). */
+export type SoundsScope = 'mine' | 'library';
+
+export const fetchMySounds = (scope: SoundsScope) =>
+  adminCall<MySounds>(`/v1/my/sounds?scope=${scope}`, { method: 'GET' });
+
+export const adminUpload = (file: Blob, label: string, tags: string[], scope: SoundsScope) => {
+  const query = new URLSearchParams({ label, scope });
   for (const t of tags) query.append('tag', t);
-  return adminCall<LibrarySound>(token, `/v1/sounds?${query}`, { method: 'POST', body: file });
+  return adminCall<LibrarySound>(`/v1/sounds?${query}`, { method: 'POST', body: file });
 };
 
-export const adminUpdate = (token: string, id: string, patch: LibrarySoundPatch) =>
-  adminCall<LibrarySound>(token, `/v1/sounds/${encodeURIComponent(id)}`, {
+export const adminUpdate = (id: string, patch: LibrarySoundPatch) =>
+  adminCall<LibrarySound>(`/v1/sounds/${encodeURIComponent(id)}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(patch),
   });
 
 /** Sets the dialogue's background (the scene without the voices), or removes it with null. */
-export const adminSetBackground = (token: string, id: string, file: Blob | null) =>
-  adminCall<LibrarySound>(token, `/v1/sounds/${encodeURIComponent(id)}/background`, {
+export const adminSetBackground = (id: string, file: Blob | null) =>
+  adminCall<LibrarySound>(`/v1/sounds/${encodeURIComponent(id)}/background`, {
     method: file ? 'PUT' : 'DELETE',
     body: file,
   });
 
 /** Speech to text on the sounds service: `samples` from toTranscriptionInput (transcribe.ts). */
-export const adminTranscribe = (
-  token: string,
-  samples: Float32Array<ArrayBuffer>,
-  language: TranscriptLanguage,
-) =>
-  adminCall<TranscriptWord[]>(token, `/v1/transcribe?language=${language}`, {
+export const adminTranscribe = (samples: Float32Array<ArrayBuffer>, language: TranscriptLanguage) =>
+  adminCall<TranscriptWord[]>(`/v1/transcribe?language=${language}`, {
     method: 'POST',
     body: samples,
   });
@@ -119,12 +119,11 @@ function base64(bytes: Uint8Array) {
  * starts ([] for a line it couldn't align). `samples` from toTranscriptionInput (transcribe.ts).
  */
 export const adminAlign = (
-  token: string,
   samples: Float32Array,
   language: TranscriptLanguage,
   lines: { startMs: number; endMs: number; text: string }[],
 ) =>
-  adminCall<{ wordStartsMs: number[][] }>(token, '/v1/align', {
+  adminCall<{ wordStartsMs: number[][] }>('/v1/align', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -134,16 +133,12 @@ export const adminAlign = (
     }),
   });
 
-export const adminDelete = (token: string, id: string) =>
-  adminCall<{ ok: true }>(token, `/v1/sounds/${encodeURIComponent(id)}`, { method: 'DELETE' });
-
-/** True if the token is accepted. */
-export async function adminCheckToken(token: string) {
-  return (await adminCall<{ ok: true }>(token, '/v1/admin', { method: 'GET' })).ok;
-}
+export const adminDelete = (id: string) =>
+  adminCall<{ ok: true }>(`/v1/sounds/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export const LIBRARY_ERROR_TEXT: Record<LibraryErrorCode | 'NETWORK', string> = {
-  UNAUTHORIZED: 'Wrong admin token.',
+  UNAUTHORIZED: 'You’re not logged in (anymore): log in again.',
+  QUOTA_EXCEEDED: 'Your sounds are full: delete some to make room.',
   NOT_FOUND: 'That sound no longer exists.',
   INVALID_PAYLOAD: 'Invalid name or tags.',
   FILE_TOO_LARGE: 'File too large (2 MB max).',

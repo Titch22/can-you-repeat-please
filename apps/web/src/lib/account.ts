@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { AccountErrorCode, AccountInfo } from '@cyrp/shared';
+import { socket } from './socket';
 import { loadProfile, saveProfile } from './storage';
 
 /** Who is logged in (null: nobody), and whether sign-up needs a code. Loaded at startup. */
@@ -34,10 +35,20 @@ export async function refreshAccount() {
   else useAccount.setState({ loaded: true });
 }
 
+/**
+ * Logged in or out: the game server reads who a player is when the socket connects, so it
+ * reconnects (a player in a room keeps their seat).
+ */
+function accountChanged() {
+  soundsPass = null;
+  socket.disconnect().connect();
+}
+
 /** Logged in: the account's name becomes the nickname (still editable on the home page). */
 function loggedIn(result: AccountResult<AccountInfo>) {
   if (!result.ok) return result;
   useAccount.setState({ ...result.value, loaded: true });
+  accountChanged();
   if (result.value.user) saveProfile({ ...loadProfile(), nickname: result.value.user.username });
   return result;
 }
@@ -51,6 +62,24 @@ export const login = async (username: string, password: string) =>
 export async function logout() {
   await call('POST', '/api/account/logout');
   useAccount.setState({ user: null });
+  accountChanged();
+}
+
+let soundsPass: { token: string; expiresAt: number } | null = null;
+
+/**
+ * The logged-in user's pass to the sounds service (their sounds; the library for admins), from
+ * the game server. Kept until a minute before it expires. '' when logged out.
+ */
+export async function soundsToken() {
+  if (!soundsPass || soundsPass.expiresAt - Date.now() < 60_000) {
+    const result = await call<{ token: string; expiresAt: number }>(
+      'GET',
+      '/api/account/sounds-token',
+    );
+    soundsPass = result.ok ? result.value : null;
+  }
+  return soundsPass?.token ?? '';
 }
 
 export const changePassword = (oldPassword: string, newPassword: string) =>

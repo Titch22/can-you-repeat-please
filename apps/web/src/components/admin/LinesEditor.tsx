@@ -48,11 +48,9 @@ function peaks(buffer: AudioBuffer, columns: number) {
  */
 export function LinesEditor({
   sound,
-  token,
   onChanged,
 }: {
   sound: LibrarySound;
-  token: string;
   onChanged: (s: LibrarySound) => void;
 }) {
   const duration = sound.durationMs;
@@ -257,7 +255,7 @@ export function LinesEditor({
   const aligned = async (base: DialogueLine[], samples: Float32Array<ArrayBuffer>) => {
     const timed = base.filter((l) => l.text);
     if (!timed.length) return base;
-    const result = await adminAlign(token, samples, language, timed);
+    const result = await adminAlign(samples, language, timed);
     if (!result.ok) {
       setError(LIBRARY_ERROR_TEXT[result.error]);
       return base;
@@ -275,7 +273,7 @@ export function LinesEditor({
 
   const suggest = () =>
     withSamples('suggest', async (samples) => {
-      const result = await adminTranscribe(token, samples, language);
+      const result = await adminTranscribe(samples, language);
       if (!result.ok) setError(LIBRARY_ERROR_TEXT[result.error]);
       else if (result.value.length === 0) setError('No speech found in this sound.');
       else {
@@ -289,7 +287,7 @@ export function LinesEditor({
   const save = async (patch: { lines?: DialogueLine[]; tags?: string[] }) => {
     setSaving(true);
     setError(null);
-    const result = await adminUpdate(token, sound.id, patch);
+    const result = await adminUpdate(sound.id, patch);
     setSaving(false);
     if (result.ok) onChanged(result.value);
     else setError(LIBRARY_ERROR_TEXT[result.error]);
@@ -298,7 +296,7 @@ export function LinesEditor({
   const setBackground = async (file: File | null) => {
     setSaving(true);
     setError(null);
-    const result = await adminSetBackground(token, sound.id, file);
+    const result = await adminSetBackground(sound.id, file);
     setSaving(false);
     if (result.ok) onChanged(result.value);
     else setError(LIBRARY_ERROR_TEXT[result.error]);

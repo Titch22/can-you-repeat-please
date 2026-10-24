@@ -15,6 +15,7 @@ import {
 } from '@cyrp/shared';
 import { AccountError, SESSION_MS, type Accounts } from '../accounts/store.js';
 import type { Limits } from '../limits.js';
+import { soundsToken } from '../sounds/library.js';
 
 const COOKIE = 'cyrp_session';
 
@@ -29,13 +30,13 @@ const STATUS: Record<AccountErrorCode, number> = {
   RATE_LIMITED: 429,
 };
 
-/** The session token from the cookie (Express doesn't parse cookies itself). */
-const sessionToken = (req: Request) =>
-  req
-    .get('Cookie')
+/** The session token in a Cookie header (Express doesn't parse cookies itself). */
+export const sessionFromCookie = (header: string | undefined) =>
+  header
     ?.split(/;\s*/)
     .find((c) => c.startsWith(`${COOKIE}=`))
     ?.slice(COOKIE.length + 1);
+const sessionToken = (req: Request) => sessionFromCookie(req.get('Cookie'));
 
 function parse<S extends z.ZodType>(schema: S, body: unknown): z.infer<S> {
   const result = schema.safeParse(body);
@@ -50,7 +51,7 @@ function parse<S extends z.ZodType>(schema: S, body: unknown): z.infer<S> {
 export function accountRoutes(
   accounts: Accounts,
   limits: Limits,
-  { secureCookies }: { secureCookies: boolean },
+  { secureCookies, soundsSecret }: { secureCookies: boolean; soundsSecret: string },
 ) {
   const router = Router();
   router.use(['/api/account', '/api/admin'], express.json({ limit: '10kb' }));
@@ -111,6 +112,16 @@ export function accountRoutes(
     if (token) accounts.logout(token);
     res.clearCookie(COOKIE, { path: '/' });
     res.json({ ok: true });
+  });
+
+  // The browser's pass to the sounds service (its own sounds; the shared library for admins).
+  router.get('/api/account/sounds-token', requireUser, (_req, res) => {
+    const user = res.locals.user as { id: number; username: string };
+    const ttlMs = 3600_000;
+    res.json({
+      token: soundsToken(soundsSecret, user.id, accounts.isAdmin(user.username), ttlMs),
+      expiresAt: Date.now() + ttlMs,
+    });
   });
 
   router.post('/api/account/password', authLimit, requireUser, async (req, res) => {

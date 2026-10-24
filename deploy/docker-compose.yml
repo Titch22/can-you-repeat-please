@@ -18,6 +18,7 @@ services:
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?set LIVEKIT_API_KEY in deploy/.env}
       LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?set LIVEKIT_API_SECRET in deploy/.env}
       SOUNDS_INTERNAL_URL: http://sounds:3100
+      SOUNDS_SECRET: ${SOUNDS_SECRET:?set SOUNDS_SECRET in deploy/.env}
       # Allowed by the web app's Content Security Policy.
       SOUNDS_PUBLIC_URL: https://${SOUNDS_DOMAIN}
       # Accounts: "open" lets anyone sign up; otherwise a code from an admin is needed.
@@ -43,7 +44,8 @@ services:
       PORT: 3100
       CLIENT_ORIGIN: https://${GAME_DOMAIN}
       SOUNDS_PUBLIC_URL: https://${SOUNDS_DOMAIN}
-      SOUNDS_ADMIN_TOKEN: ${SOUNDS_ADMIN_TOKEN:?set SOUNDS_ADMIN_TOKEN in deploy/.env}
+      SOUNDS_SECRET: ${SOUNDS_SECRET:?set SOUNDS_SECRET in deploy/.env}
+      USER_SOUNDS_QUOTA_MB: ${USER_SOUNDS_QUOTA_MB:-200}
     volumes:
       - sounds-data:/app/data
     ports:

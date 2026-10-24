@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router';
-import { Logo } from '../components/Logo';
+import { Navigate, useNavigate } from 'react-router';
 import { Button, Card, ErrorText, inputClass, Page } from '../components/ui';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { ACCOUNT_ERROR_TEXT, login, signup, useAccount } from '../lib/account';
@@ -36,9 +35,6 @@ export function LoginPage() {
   return (
     <Page>
       <div className="m-auto flex w-full max-w-md animate-enter flex-col items-center gap-6">
-        <Link to="/" aria-label="Home">
-          <Logo size="sm" />
-        </Link>
         <Card className="w-full">
           <div
             className="mb-5 grid grid-cols-2 gap-1 rounded-control bg-surface-sunken p-1"
@@ -106,9 +102,6 @@ export function LoginPage() {
             <ErrorText>{error}</ErrorText>
           </form>
         </Card>
-        <Link to="/" className="text-sm text-muted underline underline-offset-2 hover:text-ink">
-          Back to home
-        </Link>
       </div>
     </Page>
   );

@@ -1,7 +1,14 @@
 import { useState } from 'react';
 import { useMicLevel } from '../hooks/useMicLevel';
 import { unlockAudio, useAudioUnlock } from '../lib/audio';
-import { MAX_MIC_BOOST, MIN_MIC_BOOST, pickInput, setMicBoost, useDevices } from '../lib/devices';
+import {
+  MAX_MIC_BOOST,
+  MIN_MIC_BOOST,
+  pickInput,
+  setMicBoost,
+  setVolume,
+  useDevices,
+} from '../lib/devices';
 import { setInputDevice } from '../lib/mic';
 import { MicIcon, MicOffIcon } from './icons';
 import { Button, ErrorText, Slider, inputClass } from './ui';
@@ -45,9 +52,9 @@ export function MicLevel({ muted }: { muted: boolean }) {
   );
 }
 
-/** Mic picker and test meter (the "Mic settings" panel of the voice bar). */
+/** Listening volumes, mic picker and test meter (the "Audio settings" panel of the voice bar). */
 export function MicSettings({ locked }: { locked: boolean }) {
-  const { inputs, inputId, micBoost } = useDevices();
+  const { inputs, inputId, micBoost, soundsVolume, voicesVolume } = useDevices();
   const { level, detected } = useMicLevel();
   const blocked = useAudioUnlock((s) => s.blocked);
   const [busy, setBusy] = useState(false);
@@ -66,6 +73,26 @@ export function MicSettings({ locked }: { locked: boolean }) {
 
   return (
     <div className="grid animate-enter gap-4 rounded-control border border-line bg-surface-sunken/70 p-4 sm:grid-cols-2">
+      <Slider
+        label="Game sounds volume"
+        display={`${Math.round(soundsVolume * 100)}%`}
+        min={0}
+        max={1}
+        step={0.05}
+        value={soundsVolume}
+        onChange={(e) => setVolume('soundsVolume', Number(e.target.value))}
+        hint="The sounds to imitate and everyone’s attempts."
+      />
+      <Slider
+        label="Voices volume"
+        display={`${Math.round(voicesVolume * 100)}%`}
+        min={0}
+        max={1}
+        step={0.05}
+        value={voicesVolume}
+        onChange={(e) => setVolume('voicesVolume', Number(e.target.value))}
+        hint="The other players in voice chat (each one can also be set in the player list)."
+      />
       <label className="flex flex-col gap-1.5 text-sm">
         <span className="text-muted">Microphone</span>
         <select

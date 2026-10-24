@@ -1,8 +1,12 @@
+import { signSoundsToken } from '../packages/shared/src/soundsToken';
 import { beepWav } from './fixtures';
 
 const SOUNDS = 'http://localhost:3100';
-// The sounds service's development token (SOUNDS_ADMIN_TOKEN is unset in dev).
-const TOKEN = process.env.SOUNDS_ADMIN_TOKEN ?? 'dev-admin';
+// An admin token, signed with the development SOUNDS_SECRET (unset in dev), as the game server does.
+const TOKEN = signSoundsToken(
+  { sub: 0, admin: true, exp: Date.now() + 3600_000 },
+  process.env.SOUNDS_SECRET ?? 'dev-sounds-secret',
+);
 
 interface Sound {
   id: string;
@@ -11,7 +15,7 @@ interface Sound {
 }
 
 async function add(label: string, wav: Buffer, tags: string[]) {
-  const query = new URLSearchParams({ label });
+  const query = new URLSearchParams({ label, scope: 'library' });
   for (const t of tags) query.append('tag', t);
   const res = await fetch(`${SOUNDS}/v1/sounds?${query}`, {
     method: 'POST',
@@ -28,7 +32,7 @@ async function add(label: string, wav: Buffer, tags: string[]) {
 /**
  * The game tests need library sounds: at least one sound (classic) and one dialogue (teams).
  * The library starts empty, so add short beeps (tagged "e2e") when they're missing. Delete
- * them from /admin if you like.
+ * them from /sounds (as an admin) if you like.
  */
 export default async function globalSetup() {
   const sounds = (await (await fetch(`${SOUNDS}/v1/sounds`)).json()) as Sound[];

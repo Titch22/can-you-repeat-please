@@ -370,7 +370,11 @@ export class GameRunner {
     const libraryIds = selected
       .filter((id) => id.startsWith(LIBRARY_ID_PREFIX))
       .map((id) => id.slice(LIBRARY_ID_PREFIX.length));
-    const fromLibrary = await this.deps.library.resolve(libraryIds);
+    // Library sounds, and the own sounds of the players sharing theirs (if still in the room).
+    const owners = room.players.flatMap((p) =>
+      p.sharesSounds && p.userId !== null ? [p.userId] : [],
+    );
+    const fromLibrary = await this.deps.library.resolve(libraryIds, owners);
     const ticked = new Set(selected);
     return [...fromLibrary, ...room.customSounds.filter((s) => ticked.has(s.id))];
   }

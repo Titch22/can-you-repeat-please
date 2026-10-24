@@ -3,7 +3,6 @@ import { Link, Navigate, useParams } from 'react-router';
 import { RoomCodeSchema } from '@cyrp/shared';
 import { GameView } from '../components/game/GameView';
 import { Lobby } from '../components/Lobby';
-import { Logo } from '../components/Logo';
 import { ProfileFields, useProfile } from '../components/ProfileFields';
 import { Button, Card, ErrorText, Page } from '../components/ui';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
@@ -46,12 +45,7 @@ export function RoomPage() {
 function Centered({ children }: { children: ReactNode }) {
   return (
     <Page>
-      <div className="m-auto flex flex-col items-center gap-6">
-        <Link to="/" aria-label="Home">
-          <Logo size="sm" />
-        </Link>
-        {children}
-      </div>
+      <div className="m-auto flex flex-col items-center gap-6">{children}</div>
     </Page>
   );
 }
@@ -76,9 +70,6 @@ function JoinCard({ code }: { code: string }) {
   return (
     <Page>
       <div className="m-auto flex w-full max-w-md animate-enter flex-col items-center gap-6">
-        <Link to="/" aria-label="Home">
-          <Logo size="sm" />
-        </Link>
         <Card className="w-full">
           <form onSubmit={onSubmit} className="flex flex-col gap-5">
             <h1 className="font-display text-2xl font-extrabold">

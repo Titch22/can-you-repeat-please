@@ -34,6 +34,8 @@ export const config = {
   rateLimits: process.env.RATE_LIMITS !== 'off',
   /** The sound library service (apps/sounds), as reached from this server. */
   soundsUrl: process.env.SOUNDS_INTERNAL_URL ?? 'http://localhost:3100',
+  /** Signs the tokens the sounds service accepts (the same SOUNDS_SECRET as there). */
+  soundsSecret: soundsSecret(),
   /** The sound library as browsers reach it (allowed by the web app's CSP). */
   soundsPublicUrl: process.env.SOUNDS_PUBLIC_URL,
   paths: {
@@ -44,3 +46,12 @@ export const config = {
     webDist: path.join(repoRoot, 'apps/web/dist'),
   },
 };
+
+function soundsSecret() {
+  const secret =
+    process.env.SOUNDS_SECRET ?? (process.env.NODE_ENV === 'production' ? '' : 'dev-sounds-secret');
+  if (secret.length < 16 && process.env.NODE_ENV === 'production') {
+    throw new Error('SOUNDS_SECRET must be set (16+ characters) in production');
+  }
+  return secret;
+}

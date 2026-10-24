@@ -16,6 +16,9 @@ export interface LibraryQuery {
   limit?: number;
 }
 
+/** Whose sounds: a user's id, or null for the shared library. */
+export type Owner = number | null;
+
 export interface NewSound {
   /** Kept when given (folder import with a manifest), otherwise derived from the label. */
   id?: string;
@@ -24,6 +27,8 @@ export interface NewSound {
   tags: string[];
   data: Buffer;
   format: AudioFormat;
+  /** Default: the shared library. */
+  owner?: Owner;
 }
 
 interface Row {
@@ -40,8 +45,10 @@ interface Row {
 const SEP = '\u001f';
 
 /**
- * The curated sound library: metadata in SQLite, audio files named after their content hash
- * (so a file's URL never changes and can be cached forever, and duplicates are detected).
+ * The sounds: the shared library (curated by admins, every room can use it) and each user's own
+ * sounds (only rooms they share them with). Metadata in SQLite, audio files named after their
+ * content hash (a file's URL never changes and can be cached forever; identical files are
+ * stored once, and duplicates are detected).
  */
 export class Library {
   readonly filesDir: string;
@@ -90,6 +97,9 @@ export class Library {
     this.addColumn('sound_lines', 'text', "TEXT NOT NULL DEFAULT ''");
     this.addColumn('sound_lines', 'word_starts', "TEXT NOT NULL DEFAULT '[]'");
     this.addColumn('sounds', 'background_file', 'TEXT');
+    this.addColumn('sounds', 'background_bytes', 'INTEGER NOT NULL DEFAULT 0');
+    // Null: the shared library (every sound from before user sounds).
+    this.addColumn('sounds', 'owner_id', 'INTEGER');
   }
 
   close() {
@@ -100,9 +110,9 @@ export class Library {
     return (this.db.prepare('SELECT count(*) AS n FROM sounds').get() as { n: number }).n;
   }
 
-  list(query: LibraryQuery = {}): LibrarySound[] {
-    const where: string[] = [];
-    const params: SQLInputValue[] = [];
+  list(query: LibraryQuery = {}, owner: Owner = null): LibrarySound[] {
+    const where: string[] = ['s.owner_id IS ?'];
+    const params: SQLInputValue[] = [owner];
     if (query.tags?.length) {
       where.push(
         `s.id IN (SELECT sound_id FROM sound_tags WHERE tag IN (${query.tags.map(() => '?').join(',')}))`,
@@ -121,7 +131,7 @@ export class Library {
       where.push("lower(s.label) LIKE ? ESCAPE '\\'");
       params.push(`%${query.q.toLowerCase().replace(/[\\%_]/g, (c) => `\\${c}`)}%`);
     }
-    let clause = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    let clause = `WHERE ${where.join(' AND ')}`;
     if (query.limit !== undefined) {
       clause += ' ORDER BY s.label COLLATE NOCASE, s.id LIMIT ?';
       params.push(query.limit);
@@ -129,27 +139,65 @@ export class Library {
     return this.select(clause, params);
   }
 
-  /** The sounds with these ids, in library order; unknown ids are skipped. */
-  lookup(ids: string[]): LibrarySound[] {
+  /**
+   * The sounds with these ids, in library order: from the shared library and from `owners`'
+   * sounds. Unknown (or other users') ids are skipped.
+   */
+  lookup(ids: string[], owners: number[] = []): LibrarySound[] {
     if (ids.length === 0) return [];
     // json_each instead of one placeholder per id: the list can be long.
-    return this.select('WHERE s.id IN (SELECT value FROM json_each(?))', [JSON.stringify(ids)]);
+    return this.select(
+      `WHERE s.id IN (SELECT value FROM json_each(?))
+         AND (s.owner_id IS NULL OR s.owner_id IN (SELECT value FROM json_each(?)))`,
+      [JSON.stringify(ids), JSON.stringify(owners)],
+    );
+  }
+
+  /** Whose sound `id` is; undefined if it doesn't exist. */
+  ownerOf(id: string): Owner | undefined {
+    const row = this.db.prepare('SELECT owner_id FROM sounds WHERE id = ?').get(id) as
+      { owner_id: number | null } | undefined;
+    return row?.owner_id;
+  }
+
+  /** Size of sound `id`'s background (0 without one); undefined if the sound doesn't exist. */
+  backgroundBytes(id: string): number | undefined {
+    const row = this.db.prepare('SELECT background_bytes FROM sounds WHERE id = ?').get(id) as
+      { background_bytes: number } | undefined;
+    return row?.background_bytes;
+  }
+
+  /** Bytes stored for `owner`: their files as uploaded, backgrounds included. */
+  usedBytes(owner: Owner): number {
+    return (
+      this.db
+        .prepare(
+          'SELECT coalesce(sum(bytes + background_bytes), 0) AS n FROM sounds WHERE owner_id IS ?',
+        )
+        .get(owner) as { n: number }
+    ).n;
   }
 
   get(id: string): LibrarySound | undefined {
     return this.select('WHERE s.id = ?', [id])[0];
   }
 
+  /** The shared library's tags. */
   tags(): TagCount[] {
     return this.db
-      .prepare('SELECT tag AS name, count(*) AS count FROM sound_tags GROUP BY tag ORDER BY tag')
+      .prepare(
+        `SELECT tag AS name, count(*) AS count FROM sound_tags
+         WHERE sound_id IN (SELECT id FROM sounds WHERE owner_id IS NULL) GROUP BY tag ORDER BY tag`,
+      )
       .all() as unknown as TagCount[];
   }
 
-  /** The existing sound with the same audio, if any. */
-  findDuplicate(data: Buffer): LibrarySound | undefined {
+  /** `owner`'s existing sound with the same audio, if any. */
+  findDuplicate(data: Buffer, owner: Owner = null): LibrarySound | undefined {
     const hash = sha256(data);
-    const row = this.db.prepare('SELECT id FROM sounds WHERE file LIKE ? LIMIT 1').get(`${hash}.%`);
+    const row = this.db
+      .prepare('SELECT id FROM sounds WHERE file LIKE ? AND owner_id IS ? LIMIT 1')
+      .get(`${hash}.%`, owner);
     return row ? this.get((row as { id: string }).id) : undefined;
   }
 
@@ -160,7 +208,7 @@ export class Library {
       () => {
         this.db
           .prepare(
-            'INSERT INTO sounds (id, label, duration_ms, file, mime, bytes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            'INSERT INTO sounds (id, label, duration_ms, file, mime, bytes, created_at, owner_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
           )
           .run(
             id,
@@ -170,6 +218,7 @@ export class Library {
             sound.format.mime,
             sound.data.length,
             Date.now(),
+            sound.owner ?? null,
           );
         this.setTags(id, sound.tags);
       },
@@ -229,7 +278,9 @@ export class Library {
     const row = this.files(id);
     if (!row) return undefined;
     const file = background ? this.storeFile(background.data, background.format).file : null;
-    this.db.prepare('UPDATE sounds SET background_file = ? WHERE id = ?').run(file, id);
+    this.db
+      .prepare('UPDATE sounds SET background_file = ?, background_bytes = ? WHERE id = ?')
+      .run(file, background?.data.length ?? 0, id);
     if (row.background_file && row.background_file !== file) {
       this.deleteIfUnused(row.background_file);
     }

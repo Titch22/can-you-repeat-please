@@ -1,4 +1,4 @@
-import type { Ack, ErrorCode, Settings, SoundRef } from '@cyrp/shared';
+import type { Ack, ErrorCode, Settings, SharedSounds, SoundRef } from '@cyrp/shared';
 import { useGame } from '../store';
 import { socket } from './socket';
 import { clearAudioCache } from './audio';
@@ -107,6 +107,22 @@ export async function uploadSound(
     return { ok: false, error: 'INTERNAL' };
   }
 }
+
+/** The own sounds of the players sharing theirs with the room ([] if they can't be loaded). */
+export async function fetchSharedSounds(code: string): Promise<SharedSounds[]> {
+  try {
+    const res = await fetch(`/api/rooms/${code}/shared-sounds`, {
+      headers: { 'X-Session-Token': loadSession()?.sessionToken ?? '' },
+    });
+    return res.ok ? ((await res.json()) as SharedSounds[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Logged in: share (or stop sharing) my own sounds (/sounds) with the room. */
+export const shareSounds = (share: boolean) =>
+  call(socket.timeout(TIMEOUT_MS).emitWithAck('room:shareSounds', { share }));
 
 export const deleteSound = (soundId: string) =>
   call(socket.timeout(TIMEOUT_MS).emitWithAck('room:deleteSound', { soundId }));

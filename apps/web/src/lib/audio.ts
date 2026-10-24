@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { serverNow } from './clock';
+import { useDevices } from './devices';
 import { encodeWav, type Segment } from './dialogue';
 import { normalizationGain } from './loudness';
 import { loadSession } from './storage';
@@ -9,6 +10,14 @@ export const useAudioUnlock = create(() => ({ blocked: false }));
 
 let ctx: AudioContext | null = null;
 let limiter: DynamicsCompressorNode | null = null;
+/** The player's game sounds volume (after the limiter, so it never changes what clips). */
+let volume: GainNode | null = null;
+
+useDevices.subscribe((state, prev) => {
+  if (state.soundsVolume !== prev.soundsVolume && volume) {
+    volume.gain.setTargetAtTime(state.soundsVolume, audioContext().currentTime, 0.02);
+  }
+});
 
 /** One shared context: decoded buffers can be scheduled precisely with `start(when)`. */
 export function audioContext() {
@@ -35,7 +44,9 @@ function output() {
     limiter.ratio.value = 20;
     limiter.attack.value = 0.003;
     limiter.release.value = 0.1;
-    limiter.connect(c.destination);
+    volume = c.createGain();
+    volume.gain.value = useDevices.getState().soundsVolume;
+    limiter.connect(volume).connect(c.destination);
   }
   return limiter;
 }

@@ -11,7 +11,7 @@ import { GameRunner } from './game/GameRunner.js';
 import { defaultLimits, type Limits } from './limits.js';
 import type { Timing } from './game/timing.js';
 import { RoomManager, type Room } from './rooms/RoomManager.js';
-import { accountRoutes } from './routes/accounts.js';
+import { accountRoutes, sessionFromCookie } from './routes/accounts.js';
 import { audioRoutes } from './routes/audio.js';
 import type { LibraryClient } from './sounds/library.js';
 import { voiceRoutes } from './routes/voice.js';
@@ -154,9 +154,14 @@ export function createApp({
     },
   });
 
-  app.use(accountRoutes(accounts, limits, { secureCookies: config.production }));
+  app.use(
+    accountRoutes(accounts, limits, {
+      secureCookies: config.production,
+      soundsSecret: config.soundsSecret,
+    }),
+  );
   app.use(voiceRoutes(rooms, voice));
-  app.use(audioRoutes(rooms, game, storage, limits));
+  app.use(audioRoutes(rooms, game, storage, limits, library));
   const deleteSound = (code: string, playerId: string, soundId: string) => {
     const sound = rooms.removeCustomSound(code, playerId, soundId);
     const room = rooms.getOrThrow(code);
@@ -166,7 +171,14 @@ export function createApp({
       storage.deleteFile(file.path).catch((err) => console.error('[storage] delete failed', err));
   };
 
-  registerRoomHandlers(io, rooms, { game, setVoiceMuted, deleteSound, debug, limits });
+  registerRoomHandlers(io, rooms, {
+    game,
+    setVoiceMuted,
+    deleteSound,
+    debug,
+    limits,
+    accountOf: (cookie) => accounts.userBySession(sessionFromCookie(cookie)),
+  });
   serveWebApp(app);
   // Last resort: a JSON error, never Express's HTML page with details.
   const onError: ErrorRequestHandler = (err, _req, res, _next) => {

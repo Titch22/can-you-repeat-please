@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampBoost, pickInput } from './devices';
+import { clampBoost, clampVolume, pickInput } from './devices';
 
 const mics = [{ deviceId: 'headset' }, { deviceId: 'webcam' }];
 
@@ -29,5 +29,17 @@ describe('clampBoost', () => {
     expect(clampBoost(undefined)).toBe(1);
     expect(clampBoost('loud')).toBe(1);
     expect(clampBoost(NaN)).toBe(1);
+  });
+});
+
+describe('clampVolume', () => {
+  it('keeps a saved volume within 0–100%, full volume when missing or invalid', () => {
+    expect(clampVolume('0.4')).toBe(0.4);
+    expect(clampVolume('0')).toBe(0); // muted stays muted
+    expect(clampVolume('7')).toBe(1);
+    expect(clampVolume(-1)).toBe(0);
+    expect(clampVolume(null)).toBe(1);
+    expect(clampVolume('')).toBe(1);
+    expect(clampVolume('loud')).toBe(1);
   });
 });

@@ -34,7 +34,7 @@
 | Sounds               | Checkbox per sound: library + lobby uploads    | none    |
 | Extra recording time | 0–3s added to the sound's length               | 1s      |
 | Voting time          | 10–60s                                         | 20s     |
-| Replay the original  | On, off (playback starts with the attempts)    | on      |
+| Replay the original  | On, off (playback starts with the attempts)    | off     |
 
 ### Custom sounds
 

@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate } from 'react-router';
-import { Logo } from '../components/Logo';
+import { Navigate } from 'react-router';
 import { Badge, Button, Card, ErrorText, inputClass, Page } from '../components/ui';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import {
@@ -64,14 +63,6 @@ export function AccountsAdminPage() {
   const unused = invites.filter((i) => !i.usedBy);
   return (
     <Page>
-      <header className="flex items-center justify-between pt-3">
-        <Link to="/" aria-label="Home">
-          <Logo size="sm" />
-        </Link>
-        <Link to="/account" className="text-sm text-muted underline underline-offset-2">
-          Your account
-        </Link>
-      </header>
       {notice && (
         <p className="text-sm text-success" role="status">
           {notice}

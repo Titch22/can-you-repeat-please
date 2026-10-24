@@ -37,6 +37,10 @@ const library = {
       .filter((id) => id === 'beep')
       .map(() => ({ id: 'lib:beep', label: 'Beep', durationMs: 1000, url: '/files/beep.wav' })),
   ),
+  // Every account has one sound of its own, named after its id.
+  userSounds: vi.fn(async (userId: number): Promise<SoundRef[]> => [
+    { id: `lib:own-${userId}`, label: `Own ${userId}`, durationMs: 1000, url: '/files/own.wav' },
+  ]),
 };
 // Loose limits: the tests open many rooms from one address. Tests swap in strict ones.
 const limits: Limits = {
@@ -64,8 +68,13 @@ const withToken = (token: string) => ({ headers: { 'X-Session-Token': token } })
 let baseUrl: string;
 const clients: Client[] = [];
 
-async function connect() {
-  const socket: Client = ioClient(baseUrl, { transports: ['websocket'], forceNew: true });
+/** `cookie`: a logged-in player (the session cookie, sent when the socket connects). */
+async function connect(cookie?: string) {
+  const socket: Client = ioClient(baseUrl, {
+    transports: ['websocket'],
+    forceNew: true,
+    extraHeaders: cookie ? { Cookie: cookie } : undefined,
+  });
   clients.push(socket);
   await new Promise<void>((resolve) => socket.on('connect', resolve));
   return socket;
@@ -622,5 +631,68 @@ describe('accounts over HTTP', () => {
     expect(
       (await dave.call('POST', '/api/account/login', { username: 'dave', password })).status,
     ).toBe(200);
+  });
+});
+
+describe('sharing sounds', () => {
+  it('lets logged-in players share their own sounds with the room', async () => {
+    const signup = await fetch(`${baseUrl}/api/account/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'sharer',
+        password: 'pw-sharer-1',
+        code: accounts.createInvites(1)[0],
+      }),
+    });
+    const cookie = signup.headers.get('set-cookie')!.split(';')[0]!;
+    const userId = accounts.userBySession(cookie.split('=')[1])!.id;
+
+    const host = await connect();
+    const created = await host.emitWithAck('room:create', { nickname: 'Host', color: '#ff0000' });
+    if (!created.ok) throw new Error(created.error);
+    // A logged-in player shares from the room; a logged-out one can't.
+    const sharer = await connect(cookie);
+    const joined = await sharer.emitWithAck('room:join', {
+      code: created.code,
+      nickname: 'Sharer',
+      color: '#00ff00',
+    });
+    if (!joined.ok) throw new Error(joined.error);
+    const sharing = nextState(host, (s) => s.players.some((p) => p.sharesSounds));
+    expect(await sharer.emitWithAck('room:shareSounds', { share: true })).toEqual({ ok: true });
+    await sharing;
+    const anon = await connect();
+    await anon.emitWithAck('room:join', { code: created.code, nickname: 'Anon', color: '#0000ff' });
+    expect(await anon.emitWithAck('room:shareSounds', { share: true })).toEqual({
+      ok: false,
+      error: 'NOT_LOGGED_IN',
+    });
+
+    const res = await fetch(
+      `${baseUrl}/api/rooms/${created.code}/shared-sounds`,
+      withToken(created.sessionToken),
+    );
+    expect(await res.json()).toEqual([
+      {
+        playerId: joined.playerId,
+        sounds: [
+          {
+            id: `lib:own-${userId}`,
+            label: `Own ${userId}`,
+            durationMs: 1000,
+            url: '/files/own.wav',
+          },
+        ],
+      },
+    ]);
+    expect((await fetch(`${baseUrl}/api/rooms/${created.code}/shared-sounds`)).status).toBe(401);
+    // Unsharing takes them out again.
+    await sharer.emitWithAck('room:shareSounds', { share: false });
+    const after = await fetch(
+      `${baseUrl}/api/rooms/${created.code}/shared-sounds`,
+      withToken(created.sessionToken),
+    );
+    expect(await after.json()).toEqual([]);
   });
 });
