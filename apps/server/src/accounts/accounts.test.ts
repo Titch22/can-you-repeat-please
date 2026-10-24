@@ -62,9 +62,16 @@ describe('accounts', () => {
     expect(accounts.listUsers()).toMatchObject([{ username: 'Alice', isAdmin: false }]);
   });
 
+  it('needs a code for an admin name even when sign-up is open', async () => {
+    const accounts = open(true);
+    expect(await failure(accounts.signup('BOSS', 'password1'))).toBe('INVALID_CODE');
+    await accounts.signup('boss', 'password1', accounts.createInvites(1)[0]);
+    expect(accounts.listUsers()).toMatchObject([{ username: 'boss', isAdmin: true }]);
+  });
+
   it('logs in with the right password only, and logs out', async () => {
     const accounts = open(true);
-    await accounts.signup('boss', 'password1');
+    await accounts.signup('boss', 'password1', accounts.createInvites(1)[0]);
     expect(await failure(accounts.login('boss', 'wrong-password'))).toBe('BAD_CREDENTIALS');
     expect(await failure(accounts.login('nobody', 'password1'))).toBe('BAD_CREDENTIALS');
     const { token } = await accounts.login('BOSS', 'password1');

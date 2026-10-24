@@ -25,8 +25,8 @@ export const config = {
     url: process.env.LIVEKIT_URL ?? 'ws://localhost:7880',
     /** Handed to browsers; differs from `url` when LiveKit is reached through a public hostname. */
     publicUrl: process.env.LIVEKIT_PUBLIC_URL ?? process.env.LIVEKIT_URL ?? 'ws://localhost:7880',
-    apiKey: process.env.LIVEKIT_API_KEY ?? 'devkey',
-    apiSecret: process.env.LIVEKIT_API_SECRET ?? 'secret',
+    apiKey: required('LIVEKIT_API_KEY', 'devkey'),
+    apiSecret: required('LIVEKIT_API_SECRET', 'secret'),
   },
   /** Open rooms at once (default MAX_ROOMS); the e2e tests raise it. */
   maxRooms: Number(process.env.MAX_ROOMS ?? MAX_ROOMS),
@@ -46,6 +46,16 @@ export const config = {
     webDist: path.join(repoRoot, 'apps/web/dist'),
   },
 };
+
+/** An env variable; in development, `devDefault` if unset. Production refuses to start without it. */
+function required(name: string, devDefault: string) {
+  const value = process.env[name];
+  if (value) return value;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`${name} must be set in production`);
+  }
+  return devDefault;
+}
 
 function soundsSecret() {
   const secret =

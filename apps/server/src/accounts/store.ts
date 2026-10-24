@@ -117,18 +117,22 @@ export function createAccounts(
     openSignup: opts.openSignup,
     isAdmin,
 
-    /** Creates an account and logs it in. Needs an unused code unless sign-up is open. */
+    /**
+     * Creates an account and logs it in. Needs an unused code unless sign-up is open, and always
+     * for a name in ADMIN_USERNAMES (or anyone could take an admin name not created yet).
+     */
     async signup(username: string, password: string, code?: string) {
       const hash = await hashPassword(password);
       db.exec('BEGIN');
       try {
         // Checked after hashing (which waits): two sign-ups can't both spend one code.
-        const invite = opts.openSignup
+        const needsCode = !opts.openSignup || isAdmin(username);
+        const invite = !needsCode
           ? null
           : (db
               .prepare('SELECT code FROM invites WHERE code = ? AND used_by IS NULL')
               .get((code ?? '').toUpperCase()) as { code: string } | undefined);
-        if (!opts.openSignup && !invite) throw new AccountError('INVALID_CODE');
+        if (needsCode && !invite) throw new AccountError('INVALID_CODE');
         if (userNamed(username)) throw new AccountError('USERNAME_TAKEN');
         const { lastInsertRowid } = db
           .prepare('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)')

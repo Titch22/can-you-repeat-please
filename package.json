@@ -28,5 +28,10 @@
     "typescript": "^6.0.3",
     "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.5"
+  },
+  "pnpm": {
+    "overrides": {
+      "body-parser": ">=2.4.0"
+    }
   }
 }
