@@ -1,6 +1,4 @@
 export const MAX_PLAYERS = 8;
-/** An on/off environment variable: "true", "1", "yes" or "on" (any case); off otherwise. */
-export const envFlag = (value: string | undefined) => /^(true|1|yes|on)$/i.test(value ?? '');
 /** Open rooms on one server (default; MAX_ROOMS env): beyond, room:create fails with SERVER_FULL. */
 export const MAX_ROOMS = 20;
 /** All room audio (uploads + recordings) on the server's disk at once. */

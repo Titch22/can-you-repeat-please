@@ -60,14 +60,14 @@ let limits: {
   failedAuth: RateLimiter;
   upload: RateLimiter;
   speech: RateLimiter;
-  youtube: RateLimiter;
+  download: RateLimiter;
 };
 const align = vi.fn(async (_samples: Float32Array, _language: TranscriptLanguage, lines) =>
   (lines as { startMs: number }[]).map((l) => [l.startMs]),
 );
-const youtube = vi.fn(async (url: string) => {
-  if (url.includes('fail')) throw new LibraryError('YOUTUBE_FAILED');
-  return { data: Buffer.from('M4A AUDIO'), ext: 'm4a', title: 'Ça va ?' };
+const download = vi.fn(async (url: string) => {
+  if (url.includes('fail')) throw new LibraryError('DOWNLOAD_FAILED');
+  return { data: Buffer.from('MP3 AUDIO'), mime: 'audio/mpeg', title: 'Ça va ?' };
 });
 const transcribe = vi.fn(async (samples: Float32Array, _language: TranscriptLanguage) => [
   { text: `${samples.length} samples`, startMs: 0, endMs: 100 },
@@ -80,7 +80,7 @@ beforeEach(async () => {
     failedAuth: new RateLimiter(5, 60_000),
     upload: new RateLimiter(1000, 1),
     speech: new RateLimiter(1000, 1),
-    youtube: new RateLimiter(1000, 1),
+    download: new RateLimiter(1000, 1),
   };
   const app = createSoundsApp({
     library,
@@ -89,7 +89,7 @@ beforeEach(async () => {
     clientOrigin: ['http://game.test'],
     transcribe,
     align,
-    youtube,
+    download,
     limits,
   });
   server = app.listen(0);
@@ -381,45 +381,23 @@ describe('user sounds', () => {
   });
 });
 
-describe('YouTube', () => {
+describe('download from a link', () => {
   const post = (body: unknown, token = ALICE) =>
-    fetch(`${base}/v1/youtube`, {
+    fetch(`${base}/v1/download`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
 
-  it('returns the audio and its title to logged-in users', async () => {
-    const res = await post({ url: 'https://youtu.be/abc' });
-    expect(res.headers.get('content-type')).toBe('audio/mp4');
+  it('returns the audio and its name to logged-in users', async () => {
+    const res = await post({ url: 'https://www.myinstants.com/media/sounds/a.mp3' });
+    expect(res.headers.get('content-type')).toBe('audio/mpeg');
     expect(decodeURIComponent(res.headers.get('x-title')!)).toBe('Ça va ?');
-    expect(Buffer.from(await res.arrayBuffer()).toString()).toBe('M4A AUDIO');
-    expect((await post({ url: 'https://youtu.be/abc' }, 'wrong')).status).toBe(401);
+    expect(Buffer.from(await res.arrayBuffer()).toString()).toBe('MP3 AUDIO');
+    expect((await post({ url: 'https://example.com/a.mp3' }, 'wrong')).status).toBe(401);
     expect((await post({})).status).toBe(400);
-    const failed = await post({ url: 'https://youtu.be/fail' });
-    expect([failed.status, (await failed.json()).error]).toEqual([502, 'YOUTUBE_FAILED']);
-  });
-
-  it('has no route when YouTube downloads are off (no fetcher)', async () => {
-    const off = createSoundsApp({
-      library,
-      secret: SECRET,
-      quotaBytes: QUOTA,
-      clientOrigin: [],
-      transcribe,
-      align,
-      limits,
-    });
-    const server2 = off.listen(0);
-    await new Promise((r) => server2.once('listening', r));
-    const port = (server2.address() as AddressInfo).port;
-    const res = await fetch(`http://127.0.0.1:${port}/v1/youtube`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${ALICE}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: 'https://youtu.be/abc' }),
-    });
-    expect(res.status).toBe(404);
-    await new Promise((r) => server2.close(r));
+    const failed = await post({ url: 'https://example.com/fail.mp3' });
+    expect([failed.status, (await failed.json()).error]).toEqual([502, 'DOWNLOAD_FAILED']);
   });
 });
 

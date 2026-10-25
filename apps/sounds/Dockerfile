@@ -30,12 +30,6 @@ COPY --from=build /out/sounds/node_modules node_modules
 COPY --from=build /app/apps/sounds/dist dist
 RUN mkdir /app/data && chown node:node /app/data
 
-# yt-dlp, for sounds added from YouTube links: the standalone binary (no Python), pinned and
-# checked. YouTube changes often: bump the version (and checksum, from the release's
-# SHA2-256SUMS) when downloads start failing.
-ARG YTDLP_VERSION=2026.10.21
-ARG YTDLP_SHA256=d8bd33fca9d5b23bd5b9952b3fca36db5c46331933fda9f598a3da14ce2c243f
-ADD --chmod=755 --checksum=sha256:${YTDLP_SHA256}     https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux     /usr/local/bin/yt-dlp
 
 USER node
 VOLUME /app/data

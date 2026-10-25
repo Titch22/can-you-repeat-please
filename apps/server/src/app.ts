@@ -158,7 +158,6 @@ export function createApp({
     accountRoutes(accounts, limits, {
       secureCookies: config.production,
       soundsSecret: config.soundsSecret,
-      youtube: config.youtube,
     }),
   );
   app.use(voiceRoutes(rooms, voice));

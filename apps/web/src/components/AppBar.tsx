@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router';
 import { logout, useAccount } from '../lib/account';
 import { leaveRoom } from '../lib/actions';
@@ -15,7 +16,8 @@ const tabClass = (active: boolean) =>
 /**
  * Every page's top bar: the logo and Play (the home page, or the room the player is in) on the
  * left; Add sounds (logged in), Account and, for admins, Admin on the right. Those open pages
- * outside the game: from a room, they leave it, after a warning.
+ * outside the game: from a room, they leave it, after a warning. So does any other link to a
+ * page of the app that isn't the room (in the lobby, the game…).
  */
 export function AppBar() {
   const navigate = useNavigate();
@@ -36,7 +38,7 @@ export function AppBar() {
 
   /** From a room: false if the player cancels, otherwise they leave it first. */
   const leaveFirst = async () => {
-    if (!room) return true;
+    if (!useGame.getState().room) return true;
     if (!window.confirm(LEAVE_WARNING)) return false;
     await leaveRoom();
     return true;
@@ -45,6 +47,29 @@ export function AppBar() {
   const open = async (to: string) => {
     if (await leaveFirst()) navigate(to);
   };
+
+  // Any click on a link leading out of the room (another page of the app): same warning.
+  const roomCode = room?.code;
+  useEffect(() => {
+    if (!roomCode) return;
+    const onClick = (e: MouseEvent) => {
+      // A new tab or window (modifier keys, middle button) doesn't leave the room.
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey) return;
+      const link = (e.target as Element).closest?.('a[href]');
+      if (!(link instanceof HTMLAnchorElement) || link.target === '_blank' || link.download) {
+        return;
+      }
+      const url = new URL(link.href);
+      if (url.origin !== location.origin || url.pathname === `/r/${roomCode}`) return;
+      // Before React Router's own handler (capture phase, on the document).
+      e.preventDefault();
+      e.stopPropagation();
+      void open(url.pathname + url.search + url.hash);
+    };
+    document.addEventListener('click', onClick, true);
+    return () => document.removeEventListener('click', onClick, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- open reads the room when called
+  }, [roomCode]);
 
   /**
    * Logging out reconnects the socket, which mid-game looks like the player dropping out (it can

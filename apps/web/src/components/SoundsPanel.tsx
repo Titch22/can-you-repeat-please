@@ -307,7 +307,7 @@ function SoundTile({
   );
 }
 
-/** Room uploads: files or a YouTube link, each cropped in the editor. Gone with the room. */
+/** Room uploads: files or a link to a sound file, each cropped in the editor. Gone with the room. */
 function UploadForm({ code, remaining }: { code: string; remaining: number }) {
   return (
     <div className="flex flex-col gap-2 rounded-control border border-dashed border-line-strong bg-surface-sunken/40 p-3">

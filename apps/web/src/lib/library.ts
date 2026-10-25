@@ -133,14 +133,14 @@ export const adminAlign = (
     }),
   });
 
-/** A YouTube video's audio (5 minutes max), and its title, to crop before uploading it. */
-export async function fetchYoutube(
+/** An audio file from a link (downloaded by the sounds service), and its name, to crop. */
+export async function fetchFromLink(
   url: string,
 ): Promise<
   { ok: true; blob: Blob; title: string } | { ok: false; error: LibraryErrorCode | 'NETWORK' }
 > {
   try {
-    const res = await fetch(`${SOUNDS_URL}/v1/youtube`, {
+    const res = await fetch(`${SOUNDS_URL}/v1/download`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -168,8 +168,7 @@ export const adminDelete = (id: string) =>
 export const LIBRARY_ERROR_TEXT: Record<LibraryErrorCode | 'NETWORK', string> = {
   UNAUTHORIZED: 'You’re not logged in (anymore): log in again.',
   QUOTA_EXCEEDED: 'Your sounds are full: delete some to make room.',
-  YOUTUBE_FAILED:
-    'Couldn’t get the sound from YouTube (private or removed video, or YouTube refused the server).',
+  DOWNLOAD_FAILED: 'Couldn’t download that link (missing page, or the site refused).',
   NOT_FOUND: 'That sound no longer exists.',
   INVALID_PAYLOAD: 'Invalid name or tags.',
   FILE_TOO_LARGE: 'File too large (2 MB max).',

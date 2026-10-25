@@ -7,7 +7,6 @@ import { loadProfile, saveProfile } from './storage';
 export const useAccount = create<AccountInfo & { loaded: boolean }>(() => ({
   user: null,
   signup: 'code',
-  youtube: false,
   loaded: false,
 }));
 

@@ -181,15 +181,13 @@ export type LibraryErrorCode =
   | 'LENGTH_MISMATCH'
   | 'TRANSCRIPTION_FAILED'
   | 'QUOTA_EXCEEDED'
-  | 'YOUTUBE_FAILED'
+  | 'DOWNLOAD_FAILED'
   | 'RATE_LIMITED';
 
 /** GET /api/account: who is logged in, and whether sign-up needs a code. */
 export interface AccountInfo {
   user: { username: string; isAdmin: boolean } | null;
   signup: 'open' | 'code';
-  /** Adding sounds from YouTube links is on (ENABLE_YOUTUBE_DOWNLOADS). */
-  youtube: boolean;
 }
 
 /** Errors of the account routes, as `{ ok: false, error }` bodies. */

@@ -19,7 +19,7 @@ import { verifySoundsToken, type SoundsTokenClaims } from '@cyrp/shared/soundsTo
 import type { Aligner } from './align.js';
 import type { Library, Owner } from './library.js';
 import type { Transcriber } from './transcribe.js';
-import type { YoutubeFetcher } from './youtube.js';
+import type { Downloader } from './download.js';
 import { checkAudio, LibraryError } from './validate.js';
 
 export interface SoundsAppOptions {
@@ -33,17 +33,14 @@ export interface SoundsAppOptions {
   transcribe: Transcriber;
   /** Word timings by forced alignment, for the karaoke (tests pass a fake). */
   align: Aligner;
-  /**
-   * Downloads a YouTube video's audio, to crop in the browser (tests pass a fake). Unset when
-   * ENABLE_YOUTUBE_DOWNLOADS is off: there's no /v1/youtube route then.
-   */
-  youtube?: YoutubeFetcher;
+  /** Downloads an audio file from a link, to crop in the browser (tests pass a fake). */
+  download: Downloader;
   /** Per-IP (and per-user for speech) limits; tests pass their own. */
   limits?: {
     failedAuth: RateLimiter;
     upload: RateLimiter;
     speech: RateLimiter;
-    youtube: RateLimiter;
+    download: RateLimiter;
   };
 }
 
@@ -60,7 +57,7 @@ const STATUS: Record<LibraryErrorCode, number> = {
   DUPLICATE: 409,
   LENGTH_MISMATCH: 422,
   QUOTA_EXCEEDED: 413,
-  YOUTUBE_FAILED: 502,
+  DOWNLOAD_FAILED: 502,
   TRANSCRIPTION_FAILED: 503,
   RATE_LIMITED: 429,
 };
@@ -104,12 +101,12 @@ export function createSoundsApp({
   clientOrigin,
   transcribe,
   align,
-  youtube,
+  download,
   limits = {
     failedAuth: new RateLimiter(10, 60_000), // 10 wrong tokens, then 1 more per minute
     upload: new RateLimiter(60, 1_000), // 60 at once, then 1 per second
     speech: new RateLimiter(20, 180_000), // per user: 20 at once, then 20 per hour
-    youtube: new RateLimiter(10, 360_000), // per user: 10 at once, then 10 per hour
+    download: new RateLimiter(30, 120_000), // per user: 30 at once, then 30 per hour
   },
 }: SoundsAppOptions) {
   const app = express();
@@ -349,19 +346,20 @@ export function createSoundsApp({
     },
   );
 
-  // A YouTube video's audio, to crop in the browser before uploading it like a file.
-  if (youtube)
-    app.post('/v1/youtube', requireUser, express.json({ limit: '2kb' }), async (req, res) => {
-      const body = z.object({ url: z.string().max(300) }).safeParse(req.body);
-      if (!body.success) throw new LibraryError('INVALID_PAYLOAD');
-      if (!limits.youtube.take(`user:${authOf(res).sub}`)) throw new LibraryError('RATE_LIMITED');
-      const { data, ext, title } = await youtube(body.data.url);
-      audit(req, res, `fetched ${body.data.url} from YouTube`);
-      res.type(ext === 'webm' ? 'audio/webm' : 'audio/mp4');
-      res.setHeader('X-Title', encodeURIComponent(title));
-      res.setHeader('Access-Control-Expose-Headers', 'X-Title');
-      res.send(data);
-    });
+  // An audio file from a link (the browser can't fetch most sites itself), to crop in the
+  // browser before uploading it like a file. Public addresses only: see download.ts.
+  app.post('/v1/download', requireUser, express.json({ limit: '2kb' }), async (req, res) => {
+    const body = z.object({ url: z.string().max(2000) }).safeParse(req.body);
+    if (!body.success) throw new LibraryError('INVALID_PAYLOAD');
+    if (!limits.download.take(`user:${authOf(res).sub}`)) throw new LibraryError('RATE_LIMITED');
+    const { data, mime, title } = await download(body.data.url);
+    // Quoted: a link can't add lines to the log.
+    audit(req, res, `downloaded ${JSON.stringify(body.data.url)}`);
+    res.type(mime);
+    res.setHeader('X-Title', encodeURIComponent(title));
+    res.setHeader('Access-Control-Expose-Headers', 'X-Title');
+    res.send(data);
+  });
 
   app.delete('/v1/sounds/:id', requireUser, (req, res) => {
     editable(res, String(req.params.id));
