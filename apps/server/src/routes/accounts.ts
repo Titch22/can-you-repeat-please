@@ -51,7 +51,11 @@ function parse<S extends z.ZodType>(schema: S, body: unknown): z.infer<S> {
 export function accountRoutes(
   accounts: Accounts,
   limits: Limits,
-  { secureCookies, soundsSecret }: { secureCookies: boolean; soundsSecret: string },
+  {
+    secureCookies,
+    soundsSecret,
+    youtube,
+  }: { secureCookies: boolean; soundsSecret: string; youtube: boolean },
 ) {
   const router = Router();
   router.use(['/api/account', '/api/admin'], express.json({ limit: '10kb' }));
@@ -86,6 +90,7 @@ export function accountRoutes(
   const info = (username: string | null): AccountInfo => ({
     user: username ? { username, isAdmin: accounts.isAdmin(username) } : null,
     signup: accounts.openSignup ? 'open' : 'code',
+    youtube,
   });
 
   router.get('/api/account', (req, res) => {

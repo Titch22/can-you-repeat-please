@@ -47,7 +47,7 @@ describe('createYoutubeFetcher', () => {
 
   it('runs yt-dlp without a shell, audio only, and returns the file and title', async () => {
     const execFile = fake('AUDIO');
-    const fetch = createYoutubeFetcher('yt-dlp', execFile);
+    const fetch = createYoutubeFetcher('yt-dlp', undefined, execFile);
     const result = await fetch('https://youtu.be/abc');
     expect(result).toEqual({ data: Buffer.from('AUDIO'), ext: 'm4a', title: 'My clip' });
     const [bin, args] = execFile.mock.calls[0]!;
@@ -56,22 +56,34 @@ describe('createYoutubeFetcher', () => {
     expect(args).toContain('--ignore-config');
     expect(args.join(' ')).toContain('duration<=300');
     expect(args.at(-1)).toBe('https://youtu.be/abc');
+    expect(args).not.toContain('--cookies');
+  });
+
+  it('passes the cookies file when there is one', async () => {
+    const execFile = fake('AUDIO');
+    await createYoutubeFetcher(
+      'yt-dlp',
+      '/app/data/youtube-cookies.txt',
+      execFile,
+    )('https://youtu.be/abc');
+    const args = execFile.mock.calls[0]![1];
+    expect(args[args.indexOf('--cookies') + 1]).toBe('/app/data/youtube-cookies.txt');
   });
 
   it('refuses other links before running anything, and reports failures', async () => {
     const execFile = fake('AUDIO');
-    const fetch = createYoutubeFetcher('yt-dlp', execFile);
+    const fetch = createYoutubeFetcher('yt-dlp', undefined, execFile);
     expect(await code(fetch('http://sounds:3100/v1/sounds'))).toBe('INVALID_PAYLOAD');
     expect(execFile).not.toHaveBeenCalled();
     // Too long: yt-dlp skips it and writes nothing.
-    expect(await code(createYoutubeFetcher('yt-dlp', fake(null))('https://youtu.be/x'))).toBe(
-      'SOUND_TOO_LONG',
-    );
+    expect(
+      await code(createYoutubeFetcher('yt-dlp', undefined, fake(null))('https://youtu.be/x')),
+    ).toBe('SOUND_TOO_LONG');
     // yt-dlp fails: its temp folder is still removed.
     const failing = fake('PARTIAL', true);
-    expect(await code(createYoutubeFetcher('yt-dlp', failing)('https://youtu.be/x'))).toBe(
-      'YOUTUBE_FAILED',
-    );
+    expect(
+      await code(createYoutubeFetcher('yt-dlp', undefined, failing)('https://youtu.be/x')),
+    ).toBe('YOUTUBE_FAILED');
     const out = failing.mock.calls[0]![1][failing.mock.calls[0]![1].indexOf('-o') + 1]!;
     expect(fs.existsSync(out.replace(/[^/\\]+$/, ''))).toBe(false);
   });

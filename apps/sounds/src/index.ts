@@ -14,8 +14,11 @@ const app = createSoundsApp({
   clientOrigin: config.clientOrigin,
   transcribe: createTranscriber(config.dataDir),
   align: createAligner(config.dataDir),
-  youtube: createYoutubeFetcher(config.ytdlp),
+  youtube: config.youtube ? createYoutubeFetcher(config.ytdlp, config.ytdlpCookies) : undefined,
 });
 app.listen(config.port, () => {
+  console.log(
+    `[sounds] YouTube downloads ${config.youtube ? 'on' : 'off'} (ENABLE_YOUTUBE_DOWNLOADS)`,
+  );
   console.log(`[sounds] ${library.count()} sounds, listening on http://localhost:${config.port}`);
 });

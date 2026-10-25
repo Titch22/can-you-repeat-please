@@ -38,6 +38,11 @@ export function youtubeUrl(text: string): string | null {
  */
 export function createYoutubeFetcher(
   binary: string,
+  /**
+   * A cookies.txt of a signed-in YouTube session: YouTube asks server addresses to "sign in to
+   * confirm you're not a bot". yt-dlp also writes refreshed cookies back to it: keep it writable.
+   */
+  cookies?: string,
   execFile: ExecFile = nodeExecFile as unknown as ExecFile,
 ): YoutubeFetcher {
   let queue: Promise<unknown> = Promise.resolve();
@@ -51,6 +56,7 @@ export function createYoutubeFetcher(
         '--ignore-config',
         '--no-playlist',
         '--no-warnings',
+        ...(cookies ? ['--cookies', cookies] : []),
         '-f',
         'bestaudio[ext=m4a]/bestaudio',
         '--match-filter',

@@ -1,4 +1,4 @@
-import { MAX_ROOMS } from '@cyrp/shared';
+import { envFlag, MAX_ROOMS } from '@cyrp/shared';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -11,6 +11,8 @@ export const config = {
   debug: process.env.NODE_ENV !== 'production',
   /** Behind HTTPS: session cookies are sent over HTTPS only. */
   production: process.env.NODE_ENV === 'production',
+  /** ENABLE_YOUTUBE_DOWNLOADS=true: the web app offers YouTube links (the sounds service runs them). */
+  youtube: envFlag(process.env.ENABLE_YOUTUBE_DOWNLOADS),
   accounts: {
     /** ACCOUNT_CREATION=open: anyone can sign up. Otherwise a code from an admin is needed. */
     openSignup: process.env.ACCOUNT_CREATION === 'open',

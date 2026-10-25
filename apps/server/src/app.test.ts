@@ -539,7 +539,7 @@ describe('accounts over HTTP', () => {
   it('signs up with a code only, with an HttpOnly SameSite cookie', async () => {
     const alice = client();
     expect(await alice.call('GET', '/api/account')).toMatchObject({
-      body: { user: null, signup: 'code' },
+      body: { user: null, signup: 'code', youtube: false },
     });
     expect(
       (
@@ -555,7 +555,11 @@ describe('accounts over HTTP', () => {
       password: 'pw-alice-1',
       code: code(),
     });
-    expect(res.body).toEqual({ user: { username: 'alice', isAdmin: false }, signup: 'code' });
+    expect(res.body).toEqual({
+      user: { username: 'alice', isAdmin: false },
+      signup: 'code',
+      youtube: false,
+    });
     expect(res.setCookie).toMatch(/HttpOnly/i);
     expect(res.setCookie).toMatch(/SameSite=Lax/i);
     expect((await alice.call('GET', '/api/account')).body.user).toEqual({

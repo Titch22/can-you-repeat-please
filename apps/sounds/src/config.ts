@@ -1,3 +1,4 @@
+import { envFlag } from '@cyrp/shared';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -23,7 +24,11 @@ export const config = {
    */
   publicUrl: (process.env.SOUNDS_PUBLIC_URL ?? '/sounds-api').replace(/\/$/, ''),
   /** yt-dlp, for adding sounds from YouTube links (in the Docker image; install it for dev). */
+  /** ENABLE_YOUTUBE_DOWNLOADS=true: sounds can be added from YouTube links (off by default). */
+  youtube: envFlag(process.env.ENABLE_YOUTUBE_DOWNLOADS),
   ytdlp: process.env.YTDLP_PATH ?? 'yt-dlp',
+  /** Optional: cookies.txt of a signed-in YouTube account, past YouTube's bot check. */
+  ytdlpCookies: process.env.YTDLP_COOKIES || undefined,
   /** Holds library.db and files/. A Docker volume in production. */
   dataDir: process.env.SOUNDS_DATA_DIR ?? path.join(repoRoot, 'data/sounds'),
 };

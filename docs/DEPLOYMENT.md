@@ -124,7 +124,7 @@ certbot adds the HTTPS config and the HTTP → HTTPS redirect, and renews the ce
   ```
 
 - **Suggest text** and **Align words** (dialogue subtitles and karaoke timing) run in the sounds container: speech recognition (Whisper, ~80 MB) and word alignment (wav2vec2: French ~355 MB, English ~95 MB). Each model is downloaded from Hugging Face on first use and kept in the `sounds-data` volume under `models/` (no need to back it up). Loaded, they take **~800 MB** (Whisper) and **~650 MB** (French alignment) of RAM, so up to ~1.5 GB right after a "Suggest text"; each is freed after 5 idle minutes. A request uses a few seconds of CPU.
-- **Sounds from YouTube:** both upload forms accept a YouTube link (logged-in users). The sounds image ships yt-dlp (pinned in `apps/sounds/Dockerfile`; bump `YTDLP_VERSION` and its checksum when YouTube changes break it). YouTube often asks server addresses for a bot check: if links fail with "YouTube refused the server", that's it, and file uploads still work. Downloading from YouTube may go against its terms of service: your call as the operator.
+- **Sounds from YouTube:** off by default. With `ENABLE_YOUTUBE_DOWNLOADS=true` in `deploy/.env`, both upload forms accept a YouTube link (logged-in users); off, the field is hidden and the sounds service has no YouTube route. The sounds image ships yt-dlp (pinned in `apps/sounds/Dockerfile`; bump `YTDLP_VERSION` and its checksum when YouTube changes break it). YouTube often asks server addresses for a bot check ("Sign in to confirm you're not a bot" in `docker compose logs sounds`): give yt-dlp the cookies of a signed-in YouTube session, see [YouTube cookies](#youtube-cookies). File uploads work either way. Downloading from YouTube may go against its terms of service: your call as the operator.
 - **Backup:** the `sounds-data` and `game-data` volumes are the only state worth keeping.
 
   ```bash
@@ -161,6 +161,25 @@ Installs from before the library need, once:
 3. The new nginx blocks from `deploy/nginx.conf.example`: the `proxy_cache_path` line at the top and the `sounds.example.com` server. Then `sudo nginx -t && sudo systemctl reload nginx` and `sudo certbot --nginx -d sounds.yourdomain.com`.
 4. `docker compose up -d --build`, as for any update.
 5. Optional, but recommended: copy the `limit_req_zone` lines and the `location /api/` and `location /v1/` blocks of the updated `deploy/nginx.conf.example` into your nginx site (rate limits, and an optional allowlist for admin writes). The web app is rebuilt with the library's URL baked in. The library starts empty: fill it from `/sounds` as an admin (or with the import command above).
+
+## YouTube cookies
+
+YouTube refuses most datacenter addresses unless the request comes from a signed-in session. yt-dlp can use that session's cookies:
+
+1. **Use a throwaway Google account**, not your own: YouTube can flag accounts used by scripts.
+2. In a **private window**, sign in to YouTube with it, then open `https://www.youtube.com/robots.txt` in the same tab. Export the cookies of `youtube.com` in Netscape format, for example with the "Get cookies.txt LOCALLY" extension (allow it in private windows), then **close the private window** without signing out. Signing out, or keeping browsing with that session, makes YouTube replace those cookies.
+3. Put the file in the sounds volume, where the container can update it (yt-dlp writes refreshed cookies back):
+
+   ```bash
+   cd /opt/cyrp/deploy
+   docker compose cp ~/youtube-cookies.txt sounds:/app/data/youtube-cookies.txt
+   docker compose exec -u root sounds chown node:node /app/data/youtube-cookies.txt
+   rm ~/youtube-cookies.txt
+   ```
+
+4. In `deploy/.env`: `ENABLE_YOUTUBE_DOWNLOADS=true` and `YTDLP_COOKIES=/app/data/youtube-cookies.txt`, then `docker compose up -d`.
+
+The file is a login: treat it like a password. When downloads start failing again (cookies expire after a while, or YouTube changed something), export fresh cookies, and if needed bump yt-dlp in `apps/sounds/Dockerfile`.
 
 ## Upgrading to user sounds
 

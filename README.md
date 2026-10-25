@@ -41,7 +41,7 @@ cp apps/server/.env.example apps/server/.env
 pnpm dev                    # web on :5173, game server on :3000, sounds service on :3100
 ```
 
-Adding sounds from YouTube links needs [yt-dlp](https://github.com/yt-dlp/yt-dlp) on your `PATH` (`winget install yt-dlp`, `brew install yt-dlp`…) or `YTDLP_PATH` pointing to it in `apps/sounds/.env`.
+Adding sounds from YouTube links is off by default: set `ENABLE_YOUTUBE_DOWNLOADS=true` in both `apps/server/.env` and `apps/sounds/.env`. It needs [yt-dlp](https://github.com/yt-dlp/yt-dlp) on your `PATH` (`winget install yt-dlp`, `brew install yt-dlp`…) or `YTDLP_PATH` pointing to it in `apps/sounds/.env`.
 
 The sounds service keeps its library in `data/sounds/` (git-ignored); it starts empty. Add sounds at http://localhost:5173/sounds, logged in with an account listed in `ADMIN_USERNAMES` (shared library) or any account (your own sounds), or import a folder into the library with `pnpm --filter @cyrp/sounds import <dir> --tag <tag>`.
 

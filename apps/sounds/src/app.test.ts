@@ -399,6 +399,28 @@ describe('YouTube', () => {
     const failed = await post({ url: 'https://youtu.be/fail' });
     expect([failed.status, (await failed.json()).error]).toEqual([502, 'YOUTUBE_FAILED']);
   });
+
+  it('has no route when YouTube downloads are off (no fetcher)', async () => {
+    const off = createSoundsApp({
+      library,
+      secret: SECRET,
+      quotaBytes: QUOTA,
+      clientOrigin: [],
+      transcribe,
+      align,
+      limits,
+    });
+    const server2 = off.listen(0);
+    await new Promise((r) => server2.once('listening', r));
+    const port = (server2.address() as AddressInfo).port;
+    const res = await fetch(`http://127.0.0.1:${port}/v1/youtube`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${ALICE}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'https://youtu.be/abc' }),
+    });
+    expect(res.status).toBe(404);
+    await new Promise((r) => server2.close(r));
+  });
 });
 
 describe('transcription', () => {

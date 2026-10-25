@@ -24,6 +24,8 @@ services:
       # Accounts: "open" lets anyone sign up; otherwise a code from an admin is needed.
       ACCOUNT_CREATION: ${ACCOUNT_CREATION:-}
       ADMIN_USERNAMES: ${ADMIN_USERNAMES:-}
+      # Same value as for the sounds service: the web app shows the YouTube field when on.
+      ENABLE_YOUTUBE_DOWNLOADS: ${ENABLE_YOUTUBE_DOWNLOADS:-false}
     # The accounts database (back it up).
     volumes:
       - game-data:/app/data
@@ -46,6 +48,10 @@ services:
       SOUNDS_PUBLIC_URL: https://${SOUNDS_DOMAIN}
       SOUNDS_SECRET: ${SOUNDS_SECRET:?set SOUNDS_SECRET in deploy/.env}
       USER_SOUNDS_QUOTA_MB: ${USER_SOUNDS_QUOTA_MB:-200}
+      # Sounds from YouTube links (off by default); see docs/DEPLOYMENT.md.
+      ENABLE_YOUTUBE_DOWNLOADS: ${ENABLE_YOUTUBE_DOWNLOADS:-false}
+      # Optional: a signed-in YouTube session's cookies, inside the sounds-data volume.
+      YTDLP_COOKIES: ${YTDLP_COOKIES:-}
     volumes:
       - sounds-data:/app/data
     ports:

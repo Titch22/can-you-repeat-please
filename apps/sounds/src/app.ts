@@ -33,8 +33,11 @@ export interface SoundsAppOptions {
   transcribe: Transcriber;
   /** Word timings by forced alignment, for the karaoke (tests pass a fake). */
   align: Aligner;
-  /** Downloads a YouTube video's audio, to crop in the browser (tests pass a fake). */
-  youtube: YoutubeFetcher;
+  /**
+   * Downloads a YouTube video's audio, to crop in the browser (tests pass a fake). Unset when
+   * ENABLE_YOUTUBE_DOWNLOADS is off: there's no /v1/youtube route then.
+   */
+  youtube?: YoutubeFetcher;
   /** Per-IP (and per-user for speech) limits; tests pass their own. */
   limits?: {
     failedAuth: RateLimiter;
@@ -347,17 +350,18 @@ export function createSoundsApp({
   );
 
   // A YouTube video's audio, to crop in the browser before uploading it like a file.
-  app.post('/v1/youtube', requireUser, express.json({ limit: '2kb' }), async (req, res) => {
-    const body = z.object({ url: z.string().max(300) }).safeParse(req.body);
-    if (!body.success) throw new LibraryError('INVALID_PAYLOAD');
-    if (!limits.youtube.take(`user:${authOf(res).sub}`)) throw new LibraryError('RATE_LIMITED');
-    const { data, ext, title } = await youtube(body.data.url);
-    audit(req, res, `fetched ${body.data.url} from YouTube`);
-    res.type(ext === 'webm' ? 'audio/webm' : 'audio/mp4');
-    res.setHeader('X-Title', encodeURIComponent(title));
-    res.setHeader('Access-Control-Expose-Headers', 'X-Title');
-    res.send(data);
-  });
+  if (youtube)
+    app.post('/v1/youtube', requireUser, express.json({ limit: '2kb' }), async (req, res) => {
+      const body = z.object({ url: z.string().max(300) }).safeParse(req.body);
+      if (!body.success) throw new LibraryError('INVALID_PAYLOAD');
+      if (!limits.youtube.take(`user:${authOf(res).sub}`)) throw new LibraryError('RATE_LIMITED');
+      const { data, ext, title } = await youtube(body.data.url);
+      audit(req, res, `fetched ${body.data.url} from YouTube`);
+      res.type(ext === 'webm' ? 'audio/webm' : 'audio/mp4');
+      res.setHeader('X-Title', encodeURIComponent(title));
+      res.setHeader('Access-Control-Expose-Headers', 'X-Title');
+      res.send(data);
+    });
 
   app.delete('/v1/sounds/:id', requireUser, (req, res) => {
     editable(res, String(req.params.id));

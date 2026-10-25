@@ -188,6 +188,8 @@ export type LibraryErrorCode =
 export interface AccountInfo {
   user: { username: string; isAdmin: boolean } | null;
   signup: 'open' | 'code';
+  /** Adding sounds from YouTube links is on (ENABLE_YOUTUBE_DOWNLOADS). */
+  youtube: boolean;
 }
 
 /** Errors of the account routes, as `{ ok: false, error }` bodies. */

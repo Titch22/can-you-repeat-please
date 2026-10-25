@@ -11,7 +11,7 @@ const MAX_SOURCE_BYTES = 50 * 1024 * 1024;
 const labelFromFile = (f: File) => f.name.replace(/\.[^.]+$/, '');
 
 /**
- * Adding sounds: files (several at once) or a YouTube link (logged in). Each sound then opens in
+ * Adding sounds: files (several at once), or a YouTube link (logged in, ENABLE_YOUTUBE_DOWNLOADS). Each sound then opens in
  * the crop editor, one after the other; `upload` sends the kept part and answers an error
  * message, or null. `onFinished` runs once the last one is done.
  */
@@ -31,6 +31,7 @@ export function SoundAdder({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const user = useAccount((s) => s.user);
+  const youtubeOn = useAccount((s) => s.youtube);
   const [queue, setQueue] = useState<{ blob: Blob; label: string }[]>([]);
   const [index, setIndex] = useState(0);
   const [report, setReport] = useState<{ added: number; problems: string[] } | null>(null);
@@ -125,7 +126,7 @@ export function SoundAdder({
           <Button variant="secondary" onClick={() => input.current?.click()} disabled={fetching}>
             {pickLabel}
           </Button>
-          {user ? (
+          {!youtubeOn ? null : user ? (
             <form onSubmit={(e) => void fromYoutube(e)} className="flex w-full min-w-0 gap-2">
               <input
                 type="url"
