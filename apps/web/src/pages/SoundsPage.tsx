@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router';
-import { MAX_UPLOAD_BYTES, TagSchema, type LibrarySound } from '@cyrp/shared';
+import { TagSchema, type LibrarySound } from '@cyrp/shared';
 import { LinesEditor } from '../components/admin/LinesEditor';
 import { PlayButton } from '../components/game/bits';
 import {
@@ -10,6 +10,7 @@ import {
   tagCounts,
   type SoundFilter,
 } from '../components/SoundFilters';
+import { SoundAdder } from '../components/SoundAdder';
 import { Button, Card, ErrorText, inputClass, Page } from '../components/ui';
 import { useDocumentTitle } from '../hooks/useDocumentTitle';
 import { useAccount } from '../lib/account';
@@ -194,44 +195,18 @@ function UploadCard({
   onAdded: (sound: LibrarySound) => void;
   onBatchDone: () => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
   const [tagText, setTagText] = useState('');
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [report, setReport] = useState<{ added: number; problems: string[] } | null>(null);
   const tags = parseTags(tagText);
 
-  const pick = async (e: ChangeEvent<HTMLInputElement>) => {
-    const files = [...(e.target.files ?? [])];
-    e.target.value = '';
-    if (files.length === 0 || !tags) return;
-    const problems: string[] = [];
-    let added = 0;
-    setReport(null);
-    for (const [i, f] of files.entries()) {
-      setProgress({ done: i, total: files.length });
-      if (f.size > MAX_UPLOAD_BYTES) {
-        problems.push(`${f.name}: ${LIBRARY_ERROR_TEXT.FILE_TOO_LARGE}`);
-        continue;
-      }
-      const label =
-        f.name
-          .replace(/\.[^.]+$/, '')
-          .trim()
-          .slice(0, 40) || 'Sound';
-      const result = await adminUpload(f, label, tags, scope);
-      if (result.ok) {
-        added++;
-        onAdded(result.value);
-        continue;
-      }
-      const existing = result.sound ? ` (as “${result.sound.label}”)` : '';
-      problems.push(`${f.name}: ${LIBRARY_ERROR_TEXT[result.error]}${existing}`);
-      // The rest would be refused too: stop here.
-      if (['UNAUTHORIZED', 'RATE_LIMITED', 'QUOTA_EXCEEDED'].includes(result.error)) break;
+  /** One sound out of the crop editor: an error message, or null once it's in. */
+  const upload = async (file: Blob, label: string) => {
+    const result = await adminUpload(file, label, tags ?? [], scope);
+    if (result.ok) {
+      onAdded(result.value);
+      return null;
     }
-    setProgress(null);
-    setReport({ added, problems });
-    onBatchDone();
+    const existing = result.sound ? ` (as “${result.sound.label}”)` : '';
+    return `${LIBRARY_ERROR_TEXT[result.error]}${existing}`;
   };
 
   return (
@@ -268,34 +243,15 @@ function UploadCard({
             <span className="text-xs text-subtle">Existing: {knownTags.join(', ')}</span>
           )}
         </label>
-        <input
-          ref={input}
-          type="file"
-          multiple
-          accept="audio/*,.mp3,.ogg,.wav,.webm,.m4a"
-          className="hidden"
-          onChange={(e) => void pick(e)}
+        <SoundAdder
+          upload={upload}
+          onFinished={onBatchDone}
+          pickLabel="Choose files"
+          disabledReason={tags ? undefined : 'Fix the tags first.'}
         />
-        <Button onClick={() => input.current?.click()} disabled={!tags || !!progress}>
-          {progress ? `Uploading ${progress.done + 1} of ${progress.total}…` : 'Choose files'}
-        </Button>
         <p className="text-xs text-subtle">
-          20 seconds and 2 MB max each. Sounds are named after their files; rename them in the list.
+          Each sound opens in an editor: keep up to 20 seconds of it, and name it.
         </p>
-        {report && (
-          <div className="text-sm">
-            <p className="text-success">
-              {report.added} sound{report.added === 1 ? '' : 's'} added.
-            </p>
-            {report.problems.length > 0 && (
-              <ul className="mt-1 flex flex-col gap-0.5 text-danger" role="alert">
-                {report.problems.map((p, i) => (
-                  <li key={i}>{p}</li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
       </div>
     </Card>
   );
@@ -368,8 +324,12 @@ function SoundRow({
           aria-label={`Name of ${sound.id}`}
           className={`${inputClass} min-w-0 flex-1 py-1.5 text-sm font-semibold`}
         />
-        <span className="w-12 shrink-0 text-right text-xs text-subtle tabular-nums">
-          {(sound.durationMs / 1000).toFixed(1)}s
+        <span
+          className="flex w-16 shrink-0 flex-col text-right text-xs leading-tight text-subtle tabular-nums"
+          title="Length, and space it takes on the server (counted in your quota)"
+        >
+          <span>{(sound.durationMs / 1000).toFixed(1)}s</span>
+          <span data-testid="sound-size">{mb(sound.bytes)}</span>
         </span>
         <Button variant="danger" size="sm" onClick={() => void remove()} disabled={busy}>
           Delete

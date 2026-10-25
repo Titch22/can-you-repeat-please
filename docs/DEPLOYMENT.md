@@ -124,6 +124,7 @@ certbot adds the HTTPS config and the HTTP → HTTPS redirect, and renews the ce
   ```
 
 - **Suggest text** and **Align words** (dialogue subtitles and karaoke timing) run in the sounds container: speech recognition (Whisper, ~80 MB) and word alignment (wav2vec2: French ~355 MB, English ~95 MB). Each model is downloaded from Hugging Face on first use and kept in the `sounds-data` volume under `models/` (no need to back it up). Loaded, they take **~800 MB** (Whisper) and **~650 MB** (French alignment) of RAM, so up to ~1.5 GB right after a "Suggest text"; each is freed after 5 idle minutes. A request uses a few seconds of CPU.
+- **Sounds from YouTube:** both upload forms accept a YouTube link (logged-in users). The sounds image ships yt-dlp (pinned in `apps/sounds/Dockerfile`; bump `YTDLP_VERSION` and its checksum when YouTube changes break it). YouTube often asks server addresses for a bot check: if links fail with "YouTube refused the server", that's it, and file uploads still work. Downloading from YouTube may go against its terms of service: your call as the operator.
 - **Backup:** the `sounds-data` and `game-data` volumes are the only state worth keeping.
 
   ```bash

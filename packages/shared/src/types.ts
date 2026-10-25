@@ -181,6 +181,7 @@ export type LibraryErrorCode =
   | 'LENGTH_MISMATCH'
   | 'TRANSCRIPTION_FAILED'
   | 'QUOTA_EXCEEDED'
+  | 'YOUTUBE_FAILED'
   | 'RATE_LIMITED';
 
 /** GET /api/account: who is logged in, and whether sign-up needs a code. */

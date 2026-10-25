@@ -133,12 +133,43 @@ export const adminAlign = (
     }),
   });
 
+/** A YouTube video's audio (5 minutes max), and its title, to crop before uploading it. */
+export async function fetchYoutube(
+  url: string,
+): Promise<
+  { ok: true; blob: Blob; title: string } | { ok: false; error: LibraryErrorCode | 'NETWORK' }
+> {
+  try {
+    const res = await fetch(`${SOUNDS_URL}/v1/youtube`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${await soundsToken()}`,
+      },
+      body: JSON.stringify({ url }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: LibraryErrorCode };
+      return { ok: false, error: body.error ?? 'NETWORK' };
+    }
+    return {
+      ok: true,
+      blob: await res.blob(),
+      title: decodeURIComponent(res.headers.get('X-Title') ?? ''),
+    };
+  } catch {
+    return { ok: false, error: 'NETWORK' };
+  }
+}
+
 export const adminDelete = (id: string) =>
   adminCall<{ ok: true }>(`/v1/sounds/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
 export const LIBRARY_ERROR_TEXT: Record<LibraryErrorCode | 'NETWORK', string> = {
   UNAUTHORIZED: 'You’re not logged in (anymore): log in again.',
   QUOTA_EXCEEDED: 'Your sounds are full: delete some to make room.',
+  YOUTUBE_FAILED:
+    'Couldn’t get the sound from YouTube (private or removed video, or YouTube refused the server).',
   NOT_FOUND: 'That sound no longer exists.',
   INVALID_PAYLOAD: 'Invalid name or tags.',
   FILE_TOO_LARGE: 'File too large (2 MB max).',

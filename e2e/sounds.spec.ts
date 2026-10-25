@@ -86,23 +86,41 @@ test('uploader and host can delete uploads; others cannot', async ({ newPlayer }
   }
 });
 
-test('accepts sounds up to 20 seconds, rejects longer ones', async ({ newPlayer }) => {
+test('the crop editor crops, and adds 20 seconds at most', async ({ newPlayer }) => {
   const alice = await newPlayer();
   await lobby(alice, 'Alice');
-  await alice.getByTestId('sound-file').setInputFiles({
-    name: 'Long but fine.wav',
-    mimeType: 'audio/wav',
-    buffer: beepWav(19),
-  });
-  await alice.getByRole('button', { name: 'Add sound' }).click();
-  await expect(alice.getByTestId('sound-Long but fine')).toContainText('19.0s');
-  await expect(alice.getByRole('button', { name: 'Upload a sound' })).toBeVisible();
-
+  // Longer than 20 s: kept whole at first, but it can't be added until it's shortened.
   await alice.getByTestId('sound-file').setInputFiles({
     name: 'Long.wav',
     mimeType: 'audio/wav',
     buffer: beepWav(22),
   });
+  await expect(alice.getByTestId('crop-length')).toContainText('22.0s kept: shorten it');
+  await expect(alice.getByRole('button', { name: 'Add sound' })).toBeDisabled();
+  await alice.getByLabel('Start (seconds)').fill('2');
+  await expect(alice.getByTestId('crop-length')).toHaveText('20.0s kept');
   await alice.getByRole('button', { name: 'Add sound' }).click();
-  await expect(alice.getByRole('alert')).toContainText('too long');
+  await expect(alice.getByTestId('sound-Long')).toContainText('20.0s');
+  await expect(alice.getByRole('button', { name: 'Upload a sound' })).toBeVisible();
+
+  // Cropped to 1.5 s with the exact end.
+  await alice.getByTestId('sound-file').setInputFiles({
+    name: 'Short.wav',
+    mimeType: 'audio/wav',
+    buffer: beepWav(4),
+  });
+  await alice.getByLabel('End (seconds)').fill('1.5');
+  await expect(alice.getByTestId('crop-length')).toContainText('1.5s kept');
+  // Dragging from the middle of the selection moves it whole: same length, later start.
+  const wave = alice.getByTestId('crop-wave');
+  const box = (await wave.boundingBox())!;
+  const middle = box.x + (box.width * 0.75) / 8; // 0.75 s into a 4 s sound
+  await alice.mouse.move(middle, box.y + box.height / 2);
+  await alice.mouse.down();
+  await alice.mouse.move(middle + box.width / 4, box.y + box.height / 2, { steps: 5 }); // +1 s
+  await alice.mouse.up();
+  await expect(alice.getByLabel('Start (seconds)')).toHaveValue(/^1[.,]0$/);
+  await expect(alice.getByTestId('crop-length')).toContainText('1.5s kept');
+  await alice.getByRole('button', { name: 'Add sound' }).click();
+  await expect(alice.getByTestId('sound-Short')).toContainText('1.5s');
 });

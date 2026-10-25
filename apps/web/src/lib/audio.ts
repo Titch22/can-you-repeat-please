@@ -108,6 +108,11 @@ export function preload(url: string) {
   return buffer;
 }
 
+/** Drops one decoded sound (a long one, e.g. a whole YouTube clip, once cropped). */
+export function forgetAudio(url: string) {
+  buffers.delete(url);
+}
+
 export function clearAudioCache() {
   buffers.clear();
 }

@@ -22,6 +22,8 @@ export const config = {
    * (https://sounds.example.com), the web dev server's proxy path in development.
    */
   publicUrl: (process.env.SOUNDS_PUBLIC_URL ?? '/sounds-api').replace(/\/$/, ''),
+  /** yt-dlp, for adding sounds from YouTube links (in the Docker image; install it for dev). */
+  ytdlp: process.env.YTDLP_PATH ?? 'yt-dlp',
   /** Holds library.db and files/. A Docker volume in production. */
   dataDir: process.env.SOUNDS_DATA_DIR ?? path.join(repoRoot, 'data/sounds'),
 };

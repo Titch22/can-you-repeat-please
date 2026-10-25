@@ -1,10 +1,8 @@
-import { useEffect, useRef, useState, type ChangeEvent, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import {
   MAX_CUSTOM_SOUND_MS,
   MAX_CUSTOM_SOUNDS_PER_ROOM,
   isDialogue,
-  MAX_UPLOAD_BYTES,
-  SoundLabelSchema,
   type RoomState,
   type SoundRef,
 } from '@cyrp/shared';
@@ -29,7 +27,8 @@ import {
   tagCounts,
   type SoundFilter,
 } from './SoundFilters';
-import { Button, Card, inputClass } from './ui';
+import { SoundAdder } from './SoundAdder';
+import { Button, Card } from './ui';
 
 /** A sound shared by a player (their own sounds, from /sounds): `sharedBy` is their id. */
 type Listed = SoundRef & { sharedBy?: string };
@@ -308,143 +307,19 @@ function SoundTile({
   );
 }
 
-/** Default sound name: the file name without extension, trimmed to the label limit. */
-const labelFromFile = (f: File) =>
-  f.name
-    .replace(/\.[^.]+$/, '')
-    .trim()
-    .slice(0, 40) || 'Sound';
-
-/**
- * One file: name it, then "Add sound". Several files: uploaded right away, one after another,
- * each named after its file.
- */
+/** Room uploads: files or a YouTube link, each cropped in the editor. Gone with the room. */
 function UploadForm({ code, remaining }: { code: string; remaining: number }) {
-  const input = useRef<HTMLInputElement>(null);
-  const [file, setFile] = useState<File | null>(null);
-  // The file currently in the form, readable after an await (state would be stale there).
-  const current = useRef<File | null>(null);
-  const choose = (f: File | null) => {
-    current.current = f;
-    setFile(f);
-  };
-  const [label, setLabel] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
-  const [errors, setErrors] = useState<string[]>([]);
-
-  const pick = (e: ChangeEvent<HTMLInputElement>) => {
-    const picked = [...(e.target.files ?? [])];
-    e.target.value = ''; // allow picking the same files again
-    if (picked.length === 0) return;
-    const tooBig = picked.filter((f) => f.size > MAX_UPLOAD_BYTES);
-    const ok = picked.filter((f) => f.size <= MAX_UPLOAD_BYTES);
-    const problems = tooBig.map((f) =>
-      picked.length === 1
-        ? errorMessage('FILE_TOO_LARGE')
-        : `${f.name}: ${errorMessage('FILE_TOO_LARGE')}`,
-    );
-    setErrors(problems);
-    if (ok.length === 1 && picked.length === 1) {
-      choose(ok[0]!);
-      setLabel(labelFromFile(ok[0]!));
-    } else if (ok.length > 0) {
-      void uploadAll(ok, problems);
-    }
-  };
-
-  const uploadAll = async (files: File[], problems: string[]) => {
-    choose(null);
-    setBusy(true);
-    const failed = [...problems];
-    for (const [i, f] of files.entries()) {
-      setProgress({ done: i, total: files.length });
-      const result = await uploadSound(code, f, labelFromFile(f));
-      if (!result.ok) {
-        failed.push(`${f.name}: ${errorMessage(result.error)}`);
-        // The room is full: the remaining files would all fail the same way.
-        if (result.error === 'TOO_MANY_SOUNDS' || result.error === 'WRONG_PHASE') break;
-      }
-    }
-    setProgress(null);
-    setBusy(false);
-    setErrors(failed);
-  };
-
-  const submit = async () => {
-    if (!file) return;
-    setBusy(true);
-    setErrors([]);
-    const sent = file;
-    const result = await uploadSound(code, sent, label.trim());
-    setBusy(false);
-    if (result.ok) {
-      // Only clear the form if no other file was picked while this one was uploading.
-      if (current.current === sent) {
-        choose(null);
-        setLabel('');
-      }
-    } else {
-      setErrors([errorMessage(result.error)]);
-    }
-  };
-
-  const labelOk = SoundLabelSchema.safeParse(label).success;
-
   return (
     <div className="flex flex-col gap-2 rounded-control border border-dashed border-line-strong bg-surface-sunken/40 p-3">
-      <input
-        ref={input}
-        type="file"
-        multiple
-        accept="audio/*,.mp3,.ogg,.wav,.webm,.m4a"
-        className="hidden"
-        onChange={pick}
-        data-testid="sound-file"
+      <SoundAdder
+        upload={async (file, label) => {
+          const result = await uploadSound(code, file, label);
+          return result.ok ? null : errorMessage(result.error);
+        }}
+        pickLabel="Upload a sound"
+        hint={`Bring your own sounds (several at once if you like): you keep up to ${MAX_CUSTOM_SOUND_MS / 1000}s of each. They’re deleted when the lobby closes.`}
+        disabledReason={remaining > 0 ? undefined : 'Upload limit reached.'}
       />
-      {file ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <input
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            maxLength={40}
-            aria-label="Sound name"
-            className={`${inputClass} min-w-0 flex-1 py-2`}
-          />
-          <Button onClick={() => void submit()} disabled={!labelOk || busy}>
-            {busy ? 'Uploading…' : 'Add sound'}
-          </Button>
-          <Button variant="ghost" onClick={() => choose(null)} disabled={busy}>
-            Cancel
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted">
-            Bring your own sounds (pick several at once if you like): {MAX_CUSTOM_SOUND_MS / 1000}s
-            max, {MAX_UPLOAD_BYTES / 1024 / 1024} MB max each. They’re deleted when the lobby
-            closes.
-          </p>
-          <Button
-            variant="secondary"
-            disabled={remaining <= 0 || busy}
-            onClick={() => input.current?.click()}
-          >
-            {progress
-              ? `Uploading ${progress.done + 1} of ${progress.total}…`
-              : remaining > 0
-                ? 'Upload a sound'
-                : 'Upload limit reached'}
-          </Button>
-        </div>
-      )}
-      {errors.length > 0 && (
-        <ul role="alert" className="flex flex-col gap-0.5 text-sm text-danger">
-          {errors.map((e, i) => (
-            <li key={i}>{e}</li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }

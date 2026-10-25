@@ -20,6 +20,7 @@ import {
 } from '../../lib/library';
 import { fillLineText, suggestLines, toTranscriptionInput } from '../../lib/transcribe';
 import { RoleBadge } from '../game/teams';
+import { Waveform } from '../Waveform';
 import { Button, ErrorText } from '../ui';
 
 const SPEAKER_BAND: Record<Speaker, string> = {
@@ -28,19 +29,6 @@ const SPEAKER_BAND: Record<Speaker, string> = {
 };
 const sec = (ms: number) => (ms / 1000).toFixed(1);
 const sorted = (lines: DialogueLine[]) => [...lines].sort((a, b) => a.startMs - b.startMs);
-
-/** Peak per column of the first channel, 0..1. */
-function peaks(buffer: AudioBuffer, columns: number) {
-  const data = buffer.getChannelData(0);
-  const step = Math.max(1, Math.floor(data.length / columns));
-  return Array.from({ length: columns }, (_, c) => {
-    let max = 0;
-    for (let i = c * step; i < Math.min(data.length, (c + 1) * step); i++) {
-      max = Math.max(max, Math.abs(data[i]!));
-    }
-    return max;
-  });
-}
 
 /**
  * Marks who speaks when in a dialogue (Teams mode): waveform with the lines as A / B bands,
@@ -70,7 +58,6 @@ export function LinesEditor({
     const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
     return () => clearInterval(timer);
   }, [busy]);
-  const canvas = useRef<HTMLCanvasElement>(null);
   const backgroundInput = useRef<HTMLInputElement>(null);
   const frame = useRef(0);
   /** Where playback started, to read the exact position in event handlers (taps). */
@@ -78,28 +65,6 @@ export function LinesEditor({
   /** "Tap timing" in progress: the line, and the word starts tapped so far. */
   const tapping = useRef<{ line: number; starts: number[] } | null>(null);
   const [tapped, setTapped] = useState<number | null>(null); // words tapped, null when not tapping
-
-  // Waveform.
-  useEffect(() => {
-    let cancelled = false;
-    void preload(sound.url).then(({ buffer }) => {
-      const el = canvas.current;
-      if (cancelled || !el) return;
-      const ratio = window.devicePixelRatio || 1;
-      el.width = el.clientWidth * ratio;
-      el.height = el.clientHeight * ratio;
-      const g = el.getContext('2d')!;
-      g.fillStyle = getComputedStyle(el).color;
-      const cols = Math.floor(el.width / (2 * ratio));
-      peaks(buffer, cols).forEach((p, i) => {
-        const h = Math.max(1, p * el.height);
-        g.fillRect(i * 2 * ratio, (el.height - h) / 2, ratio, h);
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [sound.url]);
 
   const stop = () => {
     cancelAnimationFrame(frame.current);
@@ -309,7 +274,7 @@ export function LinesEditor({
         onClick={seek}
         role="presentation"
       >
-        <canvas ref={canvas} className="absolute inset-0 size-full text-slate-500" />
+        <Waveform url={sound.url} />
         {lines.map((l, i) => (
           <div
             key={i}

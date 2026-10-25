@@ -3,6 +3,7 @@ import { config } from './config.js';
 import { Library } from './library.js';
 import { createAligner } from './align.js';
 import { createTranscriber } from './transcribe.js';
+import { createYoutubeFetcher } from './youtube.js';
 
 const library = new Library(config.dataDir, config.publicUrl);
 
@@ -13,6 +14,7 @@ const app = createSoundsApp({
   clientOrigin: config.clientOrigin,
   transcribe: createTranscriber(config.dataDir),
   align: createAligner(config.dataDir),
+  youtube: createYoutubeFetcher(config.ytdlp),
 });
 app.listen(config.port, () => {
   console.log(`[sounds] ${library.count()} sounds, listening on http://localhost:${config.port}`);

@@ -37,6 +37,7 @@ interface Row {
   duration_ms: number;
   file: string;
   background_file: string | null;
+  bytes: number;
   tags: string | null;
   /** JSON array of [startMs, endMs, speaker, text, wordStartsMs], in order. */
   lines: string;
@@ -312,6 +313,7 @@ export class Library {
     const rows = this.db
       .prepare(
         `SELECT s.id, s.label, s.duration_ms, s.file, s.background_file,
+           s.bytes + s.background_bytes AS bytes,
            (SELECT group_concat(tag, '${SEP}') FROM (SELECT tag FROM sound_tags t WHERE t.sound_id = s.id ORDER BY tag)) AS tags,
            (SELECT json_group_array(json_array(start_ms, end_ms, speaker, text, json(word_starts)))
               FROM (SELECT * FROM sound_lines l WHERE l.sound_id = s.id ORDER BY idx)) AS lines
@@ -335,6 +337,7 @@ export class Library {
       })),
       url: `${this.publicUrl}/files/${r.file}`,
       backgroundUrl: r.background_file ? `${this.publicUrl}/files/${r.background_file}` : null,
+      bytes: r.bytes,
     }));
   }
 

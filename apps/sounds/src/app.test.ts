@@ -14,6 +14,7 @@ import {
 import { signSoundsToken } from '@cyrp/shared/soundsToken';
 import { createSoundsApp } from './app.js';
 import { importDir } from './importDir.js';
+import { LibraryError } from './validate.js';
 import { Library, slugify } from './library.js';
 import { toWords } from './transcribe.js';
 
@@ -55,10 +56,19 @@ let dir: string;
 let library: Library;
 let server: Server;
 let base: string;
-let limits: { failedAuth: RateLimiter; upload: RateLimiter; speech: RateLimiter };
+let limits: {
+  failedAuth: RateLimiter;
+  upload: RateLimiter;
+  speech: RateLimiter;
+  youtube: RateLimiter;
+};
 const align = vi.fn(async (_samples: Float32Array, _language: TranscriptLanguage, lines) =>
   (lines as { startMs: number }[]).map((l) => [l.startMs]),
 );
+const youtube = vi.fn(async (url: string) => {
+  if (url.includes('fail')) throw new LibraryError('YOUTUBE_FAILED');
+  return { data: Buffer.from('M4A AUDIO'), ext: 'm4a', title: 'Ça va ?' };
+});
 const transcribe = vi.fn(async (samples: Float32Array, _language: TranscriptLanguage) => [
   { text: `${samples.length} samples`, startMs: 0, endMs: 100 },
 ]);
@@ -70,6 +80,7 @@ beforeEach(async () => {
     failedAuth: new RateLimiter(5, 60_000),
     upload: new RateLimiter(1000, 1),
     speech: new RateLimiter(1000, 1),
+    youtube: new RateLimiter(1000, 1),
   };
   const app = createSoundsApp({
     library,
@@ -78,6 +89,7 @@ beforeEach(async () => {
     clientOrigin: ['http://game.test'],
     transcribe,
     align,
+    youtube,
     limits,
   });
   server = app.listen(0);
@@ -145,6 +157,7 @@ describe('sounds API', () => {
       lines: [],
       url: expect.stringMatching(/^https:\/\/sounds\.test\/files\/[0-9a-f]{64}\.wav$/),
       backgroundUrl: null,
+      bytes: wav(1).length,
     });
     await upload(wav(3, 400), 'label=Long%20moo&tag=animal');
     await upload(wav(0.5, 500), 'label=Bruh&tag=meme,classic');
@@ -287,6 +300,8 @@ describe('sounds API', () => {
     expect((await put(scene.id, wav(1, 700))).status).toBe(422); // not as long as the scene
     expect((await put('missing', wav(2, 700))).status).toBe(404);
     const withBackground = await json<LibrarySound>(await put(scene.id, wav(2, 700)));
+    // Its size on disk counts the background too.
+    expect(withBackground.bytes).toBe(wav(2).length * 2);
     expect(withBackground.backgroundUrl).toMatch(
       /^https:\/\/sounds\.test\/files\/[0-9a-f]{64}\.wav$/,
     );
@@ -363,6 +378,26 @@ describe('user sounds', () => {
     expect((await upload(wav(1, 400), 'label=Two', ALICE, 'mine')).status).toBe(201);
     // The same file as another user's (or the library's) isn't a duplicate.
     expect((await upload(wav(1, 400), 'label=Two', BOB, 'mine')).status).toBe(201);
+  });
+});
+
+describe('YouTube', () => {
+  const post = (body: unknown, token = ALICE) =>
+    fetch(`${base}/v1/youtube`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+  it('returns the audio and its title to logged-in users', async () => {
+    const res = await post({ url: 'https://youtu.be/abc' });
+    expect(res.headers.get('content-type')).toBe('audio/mp4');
+    expect(decodeURIComponent(res.headers.get('x-title')!)).toBe('Ça va ?');
+    expect(Buffer.from(await res.arrayBuffer()).toString()).toBe('M4A AUDIO');
+    expect((await post({ url: 'https://youtu.be/abc' }, 'wrong')).status).toBe(401);
+    expect((await post({})).status).toBe(400);
+    const failed = await post({ url: 'https://youtu.be/fail' });
+    expect([failed.status, (await failed.json()).error]).toEqual([502, 'YOUTUBE_FAILED']);
   });
 });
 
@@ -459,6 +494,7 @@ describe('Library', () => {
     const upgraded = new Library(old, 'https://sounds.test');
     expect(upgraded.get('a')).toMatchObject({
       backgroundUrl: null,
+      bytes: 10,
       lines: [{ startMs: 0, endMs: 500, speaker: 'A', text: '', wordStartsMs: [] }],
     });
     upgraded.close();

@@ -159,6 +159,8 @@ export const LibrarySoundSchema = z.object({
   url: z.string(),
   /** Dialogues: the same scene without the voices (music and effects), played under the players. */
   backgroundUrl: z.string().nullable().default(null),
+  /** Space on the server's disk: the file and its background, as counted in the quota. */
+  bytes: z.number().int().default(0),
 });
 export const TagCountSchema = z.object({ name: z.string(), count: z.number().int() });
 
