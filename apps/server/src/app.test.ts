@@ -125,6 +125,8 @@ describe('server', () => {
     expect(res.headers.get('x-powered-by')).toBeNull();
     const csp = res.headers.get('content-security-policy')!;
     expect(csp).toContain("script-src 'self'");
+    // The crop editor fetches the picked file from a blob: URL.
+    expect(csp).toMatch(/connect-src 'self' blob:/);
     expect(csp).toContain("frame-ancestors 'none'");
   });
 

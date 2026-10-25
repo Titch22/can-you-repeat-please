@@ -32,7 +32,8 @@ export function securityHeaders(opts: {
     "font-src 'self'",
     "img-src 'self' data:",
     `media-src 'self' blob: mediastream: ${extra(sounds)}`,
-    `connect-src 'self' ${extra(sounds, livekit, livekitHttp)}`,
+    // blob: the crop editor loads the picked file (in the browser's memory) with fetch.
+    `connect-src 'self' blob: ${extra(sounds, livekit, livekitHttp)}`,
     "worker-src 'self' blob:",
     "object-src 'none'",
     "frame-ancestors 'none'",
