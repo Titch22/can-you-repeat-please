@@ -94,6 +94,7 @@ interface RoomState {
   myVotes: string[]; // per viewer
   votedPlayerIds: string[]; // who has voted (not what they voted for)
   roundResults: { performanceId: string; playerIds: string[]; votes: number }[] | null;
+  mashups: { label: string; performance: Performance }[]; // Dub mode: each round's mashup so far
 }
 ```
 

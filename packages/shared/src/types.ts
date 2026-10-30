@@ -98,6 +98,12 @@ export interface RoundResult {
   votes: number;
 }
 
+/** A Dub mode round's result: the clip's name, and everyone's voices. */
+export interface Mashup {
+  label: string;
+  performance: Performance;
+}
+
 export interface RoomState {
   code: string;
   players: Player[];
@@ -129,6 +135,8 @@ export interface RoomState {
   /** Who has voted (not what they voted for). */
   votedPlayerIds: string[];
   roundResults: RoundResult[] | null;
+  /** Dub mode: each round's mashup so far, to download at the end. */
+  mashups: Mashup[];
 }
 
 export type ErrorCode =

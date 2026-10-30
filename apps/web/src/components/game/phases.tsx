@@ -1,5 +1,11 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
-import { MAX_VOTES_PER_PLAYER, type Performance, type Player, type RoomState } from '@cyrp/shared';
+import {
+  MAX_VOTES_PER_PLAYER,
+  type Mashup,
+  type Performance,
+  type Player,
+  type RoomState,
+} from '@cyrp/shared';
 import { useRecorder, type RecorderStatus } from '../../hooks/useRecorder';
 import { backToLobby, castVote } from '../../lib/actions';
 import {
@@ -561,6 +567,13 @@ export function FinalResults({ room, me }: PhaseProps) {
     return (
       <div className="flex flex-col items-center gap-6 pt-6 pb-2" data-testid="dub-end">
         <p className="animate-pop font-display text-4xl font-black">What have you done?</p>
+        {room.mashups.length > 0 && (
+          <ul className="flex w-full max-w-md flex-col gap-2" data-testid="mashups">
+            {room.mashups.map((m) => (
+              <MashupDownload key={m.performance.id} mashup={m} />
+            ))}
+          </ul>
+        )}
         <BackToLobby amHost={!!me?.isHost} />
       </div>
     );
@@ -615,6 +628,37 @@ export function FinalResults({ room, me }: PhaseProps) {
       )}
       <BackToLobby amHost={!!me?.isHost} />
     </div>
+  );
+}
+
+/** One round's voices, mixed in the browser into a WAV (YouTube's video and sound aren't in it). */
+function MashupDownload({ mashup }: { mashup: Mashup }) {
+  const [rendering, setRendering] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const { label, performance } = mashup;
+  const download = async () => {
+    setRendering(true);
+    setFailed(false);
+    try {
+      const segments = performanceSegments(performance, null);
+      saveBlob(await renderSegments(segments, performance.durationMs), `${label} - mashup.wav`);
+    } catch (err) {
+      console.warn('[download] failed', err);
+      setFailed(true);
+    } finally {
+      setRendering(false);
+    }
+  };
+  return (
+    <li className="flex items-center gap-2.5 rounded-control border border-line bg-surface-raised/50 px-3 py-2.5">
+      <DownloadButton
+        label={`Download the mashup of “${label}”`}
+        busy={rendering}
+        onClick={() => void download()}
+      />
+      <span className="min-w-0 flex-1 truncate text-left font-semibold">{label}</span>
+      {failed && <span className="text-sm text-danger">Couldn’t make the file.</span>}
+    </li>
   );
 }
 

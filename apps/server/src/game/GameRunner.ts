@@ -108,6 +108,7 @@ export class GameRunner {
       playback: null,
       votes: new Map(),
       roundResults: null,
+      mashups: [],
     };
     this.startRound(room);
   }
@@ -267,11 +268,14 @@ export class GameRunner {
     const g = this.game(room);
     const clipMs = g.recording!.endsAt - g.recording!.startsAt;
     const recordings = [...g.recordings.values()];
-    g.performances =
-      g.mode === 'dub'
-        ? [mashup(recordings, g.round, clipMs)]
-        : buildPerformances(recordings, g.teams, clipMs, this.rng);
     const ref = g.reference!;
+    if (g.mode === 'dub') {
+      const performance = mashup(recordings, g.round, clipMs);
+      g.performances = [performance];
+      g.mashups.push({ label: ref.label, performance });
+    } else {
+      g.performances = buildPerformances(recordings, g.teams, clipMs, this.rng);
+    }
     const items: PlaybackItem[] = [
       ...(room.settings.replayReference
         ? [{ kind: 'reference' as const, url: ref.url, durationMs: ref.durationMs }]

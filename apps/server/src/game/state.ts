@@ -1,5 +1,6 @@
 import type {
   GameMode,
+  Mashup,
   Performance,
   PlaybackItem,
   RoundResult,
@@ -38,6 +39,8 @@ export interface GameState {
   /** Ballots by player id. */
   votes: Map<string, string[]>;
   roundResults: RoundResult[] | null;
+  /** Dub mode: every round's mashup (the recordings stay until the game ends). */
+  mashups: Mashup[];
 }
 
 export const clipUrl = (code: string, fileId: string) => `/api/rooms/${code}/audio/${fileId}`;

@@ -298,6 +298,7 @@ export class RoomManager {
       myVotes: g?.votes.get(viewerId) ?? [],
       votedPlayerIds: g ? [...g.votes.keys()] : [],
       roundResults: g?.roundResults ?? null,
+      mashups: g?.mashups ?? [],
     } satisfies Partial<RoomState>;
   }
 
