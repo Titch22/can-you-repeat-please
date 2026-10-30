@@ -1,6 +1,6 @@
 /**
  * Adds a folder of sounds to the library.
- *   pnpm --filter @cyrp/sounds import <dir> [--tag meme] [--tag animal]
+ *   pnpm --filter @cyrp/sounds run import <dir> [--tag meme] [--tag animal]
  *   (in the container: node dist/import.js <dir> --tag meme)
  */
 import { parseArgs } from 'node:util';

@@ -77,6 +77,17 @@ Random pairs dub a short movie dialogue: each member of a pair voices one of its
 - **Vote:** for other teams (not your own), up to 2 as in Classic. Each vote gives **a point to every member** of the team. The podium stays per player.
 - Each performance can be replayed and downloaded as a WAV of the stitched scene.
 
+### Dub
+
+Everyone talks over the same muted YouTube clip at once, and the room hears the horrible result. It's a party moment, not a contest: no teams, no votes, no scores.
+
+- **Clips:** in the lobby, any player pastes a YouTube link, marks where the clip starts and ends in the video (at least a second; no maximum) and names it. The host ticks the clips to play. Clips vanish with the room, and only clips are played in this mode.
+- **At least 2 players.**
+- **Listen:** the clip plays with its sound. **Repeat:** it plays again, muted, with YouTube's captions if it has some. Every mic records the whole clip, and players can't hear each other.
+- **Playback:** the muted clip, with everyone's voices mixed on top. Then the next round starts, and the game ends without a podium.
+- **What can go wrong:** a video whose owner disallows embedding can't be used (the form says so). Ads can't be prevented: one that plays during Listen delays the clip for that player only. If a video doesn't start within 4 seconds, the round goes on without it, so the voices still play. If a video stalls mid-clip, the voices run ahead of it for that player.
+- **Very long clips:** a recording can't exceed 100 MB (about an hour), and every browser has to hold everyone's recordings in memory to play the mashup, so several long recordings can be too much for a modest device.
+
 ## Round flow
 
 Pause lengths are set in `apps/server/src/game/timing.ts`.

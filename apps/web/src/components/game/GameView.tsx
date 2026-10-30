@@ -9,6 +9,7 @@ import { RoomStatus } from '../RoomStatus';
 import { VoiceBar } from '../VoiceBar';
 import { Avatar, Badge, Button, Card, Page } from '../ui';
 import { SecondsLeft } from './bits';
+import { DubVideo } from './DubVideo';
 import { RoleBadge } from './teams';
 import {
   FinalResults,
@@ -42,6 +43,22 @@ const PHASES = {
   FINAL_RESULTS: FinalResults,
 } satisfies Record<Phase, unknown>;
 
+/** Dub mode: when the clip plays in this phase (null: it waits), and whether it's muted. */
+function clipPlay(room: RoomState): { startsAt: number | null; muted: boolean } {
+  if (room.phase === 'REFERENCE') {
+    return { startsAt: room.reference?.startsAt ?? null, muted: false };
+  }
+  if (room.phase === 'RECORDING')
+    return { startsAt: room.recording?.startsAt ?? null, muted: true };
+  const pb = room.playback;
+  if (room.phase === 'PLAYBACK' && pb) {
+    return { startsAt: pb.startsAt, muted: pb.items[pb.index]?.kind === 'performance' };
+  }
+  return { startsAt: null, muted: true };
+}
+
+const CLIP_PHASES: Phase[] = ['ROUND_INTRO', 'REFERENCE', 'RECORDING', 'PLAYBACK'];
+
 export function GameView({ room }: { room: RoomState }) {
   const meId = useGame((s) => s.playerId);
   const me = room.players.find((p) => p.id === meId);
@@ -71,6 +88,7 @@ export function GameView({ room }: { room: RoomState }) {
   }, [toPreload]);
 
   const Phase = PHASES[room.phase];
+  const clip = room.reference?.video && CLIP_PHASES.includes(room.phase) ? room.reference : null;
 
   return (
     <Page>
@@ -99,12 +117,22 @@ export function GameView({ room }: { room: RoomState }) {
           </div>
           <SecondsLeft deadline={room.deadline} />
         </div>
+        {/* Outside the stage: reloading the video each phase would be slow, and may mean an ad. */}
+        {clip && (
+          <DubVideo
+            key={room.round}
+            video={clip.video!}
+            durationMs={clip.durationMs}
+            {...clipPlay(room)}
+          />
+        )}
         <div key={`${room.phase}-${room.round}`} className="animate-enter">
           <Phase room={room} me={me} />
         </div>
       </Card>
 
-      <Scoreboard room={room} meId={meId} />
+      {/* Dub mode has no scores. */}
+      {room.settings.mode !== 'dub' && <Scoreboard room={room} meId={meId} />}
       <VoiceBar gameMuted={room.voiceMuted} amHost={false} compact />
     </Page>
   );

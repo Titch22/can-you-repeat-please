@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import { LIBRARY_ID_PREFIX, TEAM_TAG } from './constants.js';
 import type {
+  AddClipPayload,
   DialogueLineSchema,
   GameModeSchema,
   LibrarySoundPatchSchema,
@@ -17,6 +18,7 @@ export type Settings = z.infer<typeof SettingsSchema>;
 export type GameMode = z.infer<typeof GameModeSchema>;
 export type Speaker = z.infer<typeof SpeakerSchema>;
 export type DialogueLine = z.infer<typeof DialogueLineSchema>;
+export type AddClip = z.infer<typeof AddClipPayload>;
 /** A team member's role: one character, or both for a player alone in their team. */
 export type Role = Speaker | 'both';
 
@@ -45,6 +47,8 @@ export interface SoundRef {
   lines?: DialogueLine[];
   /** Library dialogues: the scene without the voices, if the admin added one. */
   backgroundUrl?: string | null;
+  /** Dub mode clips: `durationMs` of this YouTube video from `startMs`. They have no `url`. */
+  video?: { youtubeId: string; startMs: number };
 }
 
 /** A Teams mode dialogue: tagged "team", with lines for both characters. */
@@ -65,13 +69,20 @@ export interface Team {
 
 /**
  * What players vote for. Classic: one player's recording. Teams: a team's recordings, stitched
- * by the dialogue's lines when played (each part's `role` says whose lines it covers).
+ * by the dialogue's lines when played (each part's `role` says whose lines it covers). Dub: the
+ * one mashup of everyone's recordings, played but not voted on.
  */
 export interface Performance {
   /** Vote target: the recording's id (classic) or the team's id (teams). */
   id: string;
   playerIds: string[];
-  parts: { playerId: string; url: string; role: Role | null }[];
+  parts: {
+    playerId: string;
+    url: string;
+    role: Role | null;
+    /** Dub mode: ms of the recording before the clip starts (negative: it started after). */
+    leadMs?: number;
+  }[];
   durationMs: number;
 }
 
@@ -140,6 +151,7 @@ export type ErrorCode =
   | 'NOT_ENOUGH_SOUNDS'
   | 'LIBRARY_UNAVAILABLE'
   | 'NO_DIALOGUES'
+  | 'NO_CLIPS'
   | 'SERVER_FULL'
   | 'RATE_LIMITED'
   | 'SPECTATOR'

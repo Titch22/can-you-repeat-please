@@ -198,5 +198,5 @@ The containers restart on their own after a crash or a reboot (`restart: unless-
 | Browser never asks for the microphone           | The page isn't served over HTTPS.                                                                                                                         |
 | "Connection lost, reconnecting…" loops          | WebSocket upgrade headers missing in nginx (`Upgrade` / `Connection`).                                                                                    |
 | "The sound library is unreachable" in the lobby | The sounds container is down, `SOUNDS_DOMAIN` doesn't resolve, or its nginx site / certificate is missing. `curl -s 127.0.0.1:3100/health` on the server. |
-| Recordings fail with 413                        | nginx `client_max_body_size` too small for the game site (needs ≥ 3m).                                                                                    |
+| Recordings fail with 413                        | nginx `client_max_body_size` too small for the game site (≥ 3m, and ≥ 101m on recordings: see the example config).                                                                                    |
 | Voice fails only on strict corporate networks   | Those block everything except 443. It needs LiveKit's built-in TURN/TLS server, which requires a third hostname and certificate; not set up yet.          |

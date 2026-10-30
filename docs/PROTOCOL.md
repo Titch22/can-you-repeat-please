@@ -44,6 +44,7 @@ interface SoundRef {
   tags?: string[]; // library sounds
   lines?: DialogueLine[]; // library dialogues (the reference carries them in Teams mode)
   backgroundUrl?: string | null; // library dialogues: the scene without the voices
+  video?: { youtubeId: string; startMs: number }; // Dub mode clips (`url` is empty)
 }
 
 // Teams mode
@@ -110,6 +111,7 @@ Every event takes an ack callback that receives `{ ok: true, ... } | { ok: false
 | `room:leave`          | `{}`                                                         |                                    | player                                                                                                             |
 | `room:updateSettings` | `Partial<Settings>`                                          |                                    | host, lobby only                                                                                                   |
 | `room:kick`           | `{ playerId }`                                               |                                    | host                                                                                                               |
+| `room:addClip`        | `{ youtubeId, startMs, endMs, label }`                       |                                    | any player, lobby only; at least 1 s; counts towards the 200 sounds of a room                                      |
 | `room:deleteSound`    | `{ soundId }`                                                |                                    | the uploader or the host, lobby only                                                                               |
 | `room:shareSounds`    | `{ share }`                                                  |                                    | logged in (the socket's session cookie); the host can then tick the player's own sounds. `NOT_LOGGED_IN` otherwise |
 | `game:start`          | `{}`                                                         |                                    | host, lobby only                                                                                                   |
@@ -137,7 +139,7 @@ Every route under `/api/rooms/:code/*` needs the header `X-Session-Token: <sessi
 | `GET`  | `/api/health`                              |                            | `{ ok: true }`                       |                                                                                                                                                                                          |
 | `POST` | `/api/rooms/:code/voice-token`             |                            | `{ url, token }`                     | LiveKit URL (`LIVEKIT_PUBLIC_URL`) and a 15-min JWT for room `cyrp-<code>`; no publish right while `voiceMuted`                                                                          |
 | `POST` | `/api/rooms/:code/sounds?label=<name>`     | raw audio bytes            | `SoundRef`                           | Lobby only; ≤2 MB, 0.2–20s (measured by the server), ≤200 per room (one file per request). Errors: 409 `TOO_MANY_SOUNDS` / `WRONG_PHASE`, 415 `UNSUPPORTED_FORMAT`, 422 `SOUND_TOO_LONG` |
-| `POST` | `/api/rooms/:code/rounds/:round/recording` | raw audio bytes (the blob) | `{ ok: true }`                       | During RECORDING (until 3s after the window); ≤2 MB; one per player per round. Format sniffed from the bytes: webm, ogg, wav, mp4/m4a, mp3                                               |
+| `POST` | `/api/rooms/:code/rounds/:round/recording` | raw audio bytes (the blob) | `{ ok: true }`                       | During RECORDING (until 3s after the window, longer for long Dub mode clips); ≤2 MB (Dub mode: ≤100 MB); one per player per round. Format sniffed from the bytes: webm, ogg, wav, mp4/m4a, mp3. Dub mode: `?leadMs=<ms of it before the clip>` |
 | `GET`  | `/api/rooms/:code/audio/:fileId`           |                            | audio bytes                          | Recordings and custom sounds. `?download=<name>` sends it as an attachment named `<name>.<ext>`                                                                                          |
 | `GET`  | `/api/rooms/:code/shared-sounds`           |                            | `{ playerId, sounds: SoundRef[] }[]` | The own sounds of the players sharing theirs (logged in, `room:shareSounds { share: true }`); the host can tick them like library sounds (`lib:` ids)                                    |
 
@@ -161,7 +163,7 @@ Logging in sets an HttpOnly session cookie (`cyrp_session`, 30 days, `SameSite=L
 
 ### Error codes
 
-`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `SOUND_TOO_LONG`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `LIBRARY_UNAVAILABLE` (the sounds service didn't answer when the game started), `NO_DIALOGUES` (Teams mode without a ticked dialogue), `SPECTATOR`.
+`ROOM_NOT_FOUND`, `SESSION_EXPIRED` (resume after the grace period), `INTERNAL`, `ROOM_FULL`, `NOT_HOST`, `WRONG_PHASE`, `INVALID_PAYLOAD`, `NICKNAME_TAKEN`, `FILE_TOO_LARGE`, `UNSUPPORTED_FORMAT`, `TOO_MANY_SOUNDS`, `SOUND_TOO_LONG`, `ALREADY_SUBMITTED`, `CANNOT_VOTE_SELF`, `TOO_MANY_VOTES`, `NOT_ENOUGH_PLAYERS`, `NOT_ENOUGH_SOUNDS`, `LIBRARY_UNAVAILABLE` (the sounds service didn't answer when the game started), `NO_DIALOGUES` (Teams mode without a ticked dialogue), `NO_CLIPS` (Dub mode without a ticked clip), `SPECTATOR`.
 
 HTTP errors use the same codes in `{ ok: false, error }`, with status 401 (no seat), 409 (wrong phase, already submitted), 403 (spectator), 413 (too large) or 415 (format).
 

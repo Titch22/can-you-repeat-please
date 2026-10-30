@@ -13,6 +13,7 @@ import { RoomError, type Room, type RoomManager } from '../rooms/RoomManager.js'
 import type { LibraryClient } from '../sounds/library.js';
 import {
   buildPerformances,
+  mashup,
   pairTeams,
   pickSounds,
   tally,
@@ -33,10 +34,14 @@ export interface GameRunnerDeps {
   now?: () => number;
 }
 
+/** Dub mode: the longest wait for recordings, so a player who sends none can't stall the game. */
+const MAX_DUB_UPLOAD_WAIT_MS = 120_000;
+
 /**
  * Drives games: one timer per room moves it through
  * ROUND_INTRO → REFERENCE → RECORDING → PLAYBACK → VOTING → ROUND_RESULTS (→ next round)
- * → FINAL_RESULTS. Player actions (uploads, votes, leaving) can end a phase early.
+ * → FINAL_RESULTS. Dub mode goes straight from PLAYBACK to the next round: nobody votes.
+ * Player actions (uploads, votes, leaving) can end a phase early.
  */
 export class GameRunner {
   private timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -78,6 +83,11 @@ export class GameRunner {
     if (mode === 'teams') {
       pool = pool.filter(isDialogue);
       if (pool.length === 0) throw new RoomError('NO_DIALOGUES');
+    } else if (mode === 'dub') {
+      pool = pool.filter((s) => s.video);
+      if (pool.length === 0) throw new RoomError('NO_CLIPS');
+    } else {
+      pool = pool.filter((s) => !s.video);
     }
     const sounds = pickSounds(pool, room.settings.rounds, this.rng);
     for (const p of room.players) {
@@ -133,11 +143,16 @@ export class GameRunner {
   }
 
   /** Second half: registers the stored file. False if the phase moved on meanwhile. */
-  finishUpload(room: Room, playerId: string, fileId: string) {
+  finishUpload(room: Room, playerId: string, fileId: string, leadMs?: number) {
     const g = room.game;
     g?.uploading.delete(playerId);
     if (!g || room.phase !== 'RECORDING' || !g.recording) return false;
-    g.recordings.set(playerId, { playerId, clipId: fileId, url: clipUrl(room.code, fileId) });
+    g.recordings.set(playerId, {
+      playerId,
+      clipId: fileId,
+      url: clipUrl(room.code, fileId),
+      ...(g.mode === 'dub' ? { leadMs: leadMs ?? 0 } : {}),
+    });
     this.deps.rooms.changed(room);
     this.maybeEndRecordingEarly(room);
     return true;
@@ -183,7 +198,9 @@ export class GameRunner {
   private startRound(room: Room) {
     const g = this.game(room);
     g.round++;
-    g.reference = null;
+    // Dub mode: known from the intro on, so clients can load the video ahead of it.
+    const sound = g.sounds[g.round - 1]!;
+    g.reference = sound.video ? { ...sound, startsAt: 0 } : null;
     g.recording = null;
     g.recordings = new Map();
     g.uploading = new Set();
@@ -219,13 +236,13 @@ export class GameRunner {
     const g = this.game(room);
     const { timing } = this.deps;
     const startsAt = this.now() + timing.countdownMs;
-    const length = Math.min(
-      g.reference!.durationMs + room.settings.extraRecordMs,
-      MAX_RECORDING_MS,
-    );
+    const wanted = g.reference!.durationMs + room.settings.extraRecordMs;
+    const length = g.mode === 'dub' ? wanted : Math.min(wanted, MAX_RECORDING_MS);
     g.recording = { startsAt, endsAt: startsAt + length };
     this.enter(room, 'RECORDING');
-    const lastUpload = Math.max(timing.uploadGraceMs, timing.afterRecordingMs);
+    // A clip's recording can be long to send; the phase still ends as soon as they're all in.
+    const longUpload = g.mode === 'dub' ? Math.min(length / 4, MAX_DUB_UPLOAD_WAIT_MS) : 0;
+    const lastUpload = Math.max(timing.uploadGraceMs, timing.afterRecordingMs, longUpload);
     this.schedule(room, g.recording.endsAt + lastUpload, () => this.endRecording(room));
   }
 
@@ -241,14 +258,19 @@ export class GameRunner {
 
   private endRecording(room: Room) {
     const g = this.game(room);
-    if (g.recordings.size === 0) this.toRoundResults(room);
-    else this.toPlayback(room);
+    if (g.recordings.size > 0) this.toPlayback(room);
+    else if (g.mode === 'dub') this.nextRound(room);
+    else this.toRoundResults(room);
   }
 
   private toPlayback(room: Room) {
     const g = this.game(room);
     const clipMs = g.recording!.endsAt - g.recording!.startsAt;
-    g.performances = buildPerformances([...g.recordings.values()], g.teams, clipMs, this.rng);
+    const recordings = [...g.recordings.values()];
+    g.performances =
+      g.mode === 'dub'
+        ? [mashup(recordings, g.round, clipMs)]
+        : buildPerformances(recordings, g.teams, clipMs, this.rng);
     const ref = g.reference!;
     const items: PlaybackItem[] = [
       ...(room.settings.replayReference
@@ -270,8 +292,18 @@ export class GameRunner {
     g.playback = { items, index, startsAt };
     this.enter(room, 'PLAYBACK');
     this.schedule(room, startsAt + items[index]!.durationMs + timing.playbackGapMs, () =>
-      index + 1 < items.length ? this.playItem(room, items, index + 1) : this.toVoting(room),
+      index + 1 < items.length
+        ? this.playItem(room, items, index + 1)
+        : g.mode === 'dub'
+          ? this.nextRound(room)
+          : this.toVoting(room),
     );
+  }
+
+  private nextRound(room: Room) {
+    const g = this.game(room);
+    if (g.round < g.sounds.length) this.startRound(room);
+    else this.toFinal(room);
   }
 
   private toVoting(room: Room) {
@@ -288,9 +320,7 @@ export class GameRunner {
     }
     g.roundResults = results;
     this.enter(room, 'ROUND_RESULTS');
-    this.schedule(room, this.now() + this.deps.timing.resultsMs, () =>
-      g.round < g.sounds.length ? this.startRound(room) : this.toFinal(room),
-    );
+    this.schedule(room, this.now() + this.deps.timing.resultsMs, () => this.nextRound(room));
   }
 
   private toFinal(room: Room) {

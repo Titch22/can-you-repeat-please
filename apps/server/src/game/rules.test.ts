@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import type { Performance, SoundRef, Team } from '@cyrp/shared';
 import { RoomError } from '../rooms/RoomManager.js';
-import { buildPerformances, pairTeams, pickSounds, shuffle, tally, validateVote } from './rules.js';
+import {
+  buildPerformances,
+  mashup,
+  pairTeams,
+  pickSounds,
+  shuffle,
+  tally,
+  validateVote,
+} from './rules.js';
 
 /** Deterministic pseudo-random sequence for repeatable shuffles. */
 function seeded(seed = 42) {
@@ -18,6 +26,28 @@ const code = (fn: () => unknown) => {
   }
   return null;
 };
+
+describe('mashup', () => {
+  it('puts everyone who recorded in one performance, each with their lead', () => {
+    const performance = mashup(
+      [
+        { playerId: 'a', url: '/a', leadMs: 120 },
+        { playerId: 'b', url: '/b' },
+      ],
+      3,
+      5000,
+    );
+    expect(performance).toEqual({
+      id: 'mashup-3',
+      playerIds: ['a', 'b'],
+      parts: [
+        { playerId: 'a', url: '/a', role: null, leadMs: 120 },
+        { playerId: 'b', url: '/b', role: null, leadMs: 0 },
+      ],
+      durationMs: 5000,
+    });
+  });
+});
 
 describe('shuffle', () => {
   it('returns a permutation without touching the input', () => {

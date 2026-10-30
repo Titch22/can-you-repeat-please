@@ -128,6 +128,9 @@ describe('server', () => {
     // The crop editor fetches the picked file from a blob: URL.
     expect(csp).toMatch(/connect-src 'self' blob:/);
     expect(csp).toContain("frame-ancestors 'none'");
+    // Dub mode's video, and nothing else, can be embedded.
+    expect(csp).toContain("script-src 'self' https://www.youtube.com;");
+    expect(csp).toContain('frame-src https://www.youtube-nocookie.com;');
   });
 
   it('answers time:sync and rejects invalid payloads', async () => {
@@ -517,6 +520,42 @@ describe('custom sounds over HTTP', () => {
       404,
     );
     await waitFor(() => onDisk().length === 4);
+  });
+
+  it('lets any player add a YouTube clip, checked, and remove it', async () => {
+    const alice = await connect();
+    const created = await alice.emitWithAck('room:create', { nickname: 'Alice', color: '#ff0000' });
+    if (!created.ok) throw new Error(created.error);
+    const bob = await connect();
+    await bob.emitWithAck('room:join', {
+      code: created.code,
+      nickname: 'Bob',
+      color: '#00ff00',
+    });
+
+    const clip = { youtubeId: 'dQw4w9WgXcQ', startMs: 5000, endMs: 15_000, label: 'Scene' };
+    expect(await bob.emitWithAck('room:addClip', { ...clip, endMs: 5500 })).toEqual({
+      ok: false,
+      error: 'INVALID_PAYLOAD',
+    });
+    expect(await bob.emitWithAck('room:addClip', { ...clip, youtubeId: '"><script>' })).toEqual({
+      ok: false,
+      error: 'INVALID_PAYLOAD',
+    });
+
+    const added = nextState(alice, (s) => s.sounds.length === 1);
+    expect(await bob.emitWithAck('room:addClip', clip)).toEqual({ ok: true });
+    const [sound] = (await added).sounds;
+    expect(sound).toMatchObject({
+      label: 'Scene',
+      durationMs: 10_000,
+      url: '',
+      video: { youtubeId: 'dQw4w9WgXcQ', startMs: 5000 },
+    });
+
+    const removed = nextState(alice, (s) => s.sounds.length === 0);
+    expect(await bob.emitWithAck('room:deleteSound', { soundId: sound!.id })).toEqual({ ok: true });
+    await removed;
   });
 });
 

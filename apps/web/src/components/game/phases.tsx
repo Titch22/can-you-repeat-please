@@ -13,6 +13,7 @@ import {
 import { useServerNow } from '../../lib/clock';
 import { lineAt, performanceSegments, speaks } from '../../lib/dialogue';
 import { errorMessage } from '../../lib/errors';
+import { useDubScene } from '../../lib/youtube';
 import { Avatar, Button, ErrorText } from '../ui';
 import { DownloadButton, PlayButton, ProgressBar } from './bits';
 import {
@@ -254,7 +255,7 @@ export function RecordingPhase({ room, me }: PhaseProps) {
           data-status={status}
         >
           <span className="size-4 animate-pulse rounded-full bg-rec shadow-[0_0_12px_var(--color-rec)]" />
-          {RECORDER_TEXT[status]}
+          {room.reference?.video ? 'Your turn! Dub it!' : RECORDER_TEXT[status]}
         </p>
       ) : (
         <p
@@ -304,15 +305,18 @@ export function RecordingPhase({ room, me }: PhaseProps) {
 export function PlaybackPhase({ room }: PhaseProps) {
   const pb = room.playback;
   const item = pb?.items[pb.index];
+  // Dub mode: the voices wait for the video on this device, instead of a time set in advance.
+  const scene = useDubScene((s) => (s.startsAt === pb?.startsAt ? s.sceneStartsAt : undefined));
   useScheduledSound(item?.kind === 'reference' ? item.url : undefined, pb?.startsAt);
   useScheduledPerformance(
     room,
     item?.kind === 'performance' ? item.performance : undefined,
-    pb?.startsAt,
+    room.reference?.video ? scene : pb?.startsAt,
   );
   const now = useServerNow(100);
   if (!pb || !item) return null;
   const teams = !!room.teams;
+  const dub = !!room.reference?.video;
   const attempt = pb.items.slice(0, pb.index + 1).filter((i) => i.kind === 'performance').length;
   const total = pb.items.filter((i) => i.kind === 'performance').length;
 
@@ -320,11 +324,20 @@ export function PlaybackPhase({ room }: PhaseProps) {
   if (pb.index === 0 && now < pb.startsAt) {
     return (
       <Stage testId="playback">
-        <Headline>{teams ? 'Here come the teams!' : 'Here come the attempts!'}</Headline>
-        <Lead>
-          {pb.items[0]?.kind === 'reference' ? 'The original first, then ' : ''}
-          {total} {teams ? (total === 1 ? 'team' : 'teams') : total === 1 ? 'attempt' : 'attempts'}.
-        </Lead>
+        <Headline>
+          {dub
+            ? 'Here comes the mashup!'
+            : teams
+              ? 'Here come the teams!'
+              : 'Here come the attempts!'}
+        </Headline>
+        {!dub && (
+          <Lead>
+            {pb.items[0]?.kind === 'reference' ? 'The original first, then ' : ''}
+            {total}{' '}
+            {teams ? (total === 1 ? 'team' : 'teams') : total === 1 ? 'attempt' : 'attempts'}.
+          </Lead>
+        )}
       </Stage>
     );
   }
@@ -340,12 +353,12 @@ export function PlaybackPhase({ room }: PhaseProps) {
       ) : (
         <div key={item.performance.id} className="flex animate-enter flex-col items-center gap-3">
           <Lead>
-            {teams ? 'Team' : 'Attempt'} {attempt} of {total}
+            {dub ? 'Everyone at once' : `${teams ? 'Team' : 'Attempt'} ${attempt} of ${total}`}
           </Lead>
           <div className="font-display text-3xl font-extrabold sm:text-4xl">
             <PlayersLabel room={room} playerIds={item.performance.playerIds} size="lg" />
           </div>
-          {item.performance.id === room.myPerformanceId && (
+          {!dub && item.performance.id === room.myPerformanceId && (
             <p className="text-sm font-semibold text-accent">
               {item.performance.playerIds.length > 1 ? 'That’s your team!' : 'That’s you!'}
             </p>
@@ -543,6 +556,15 @@ const BLOCK = {
 } as const;
 
 export function FinalResults({ room, me }: PhaseProps) {
+  // Dub mode: nobody won.
+  if (room.settings.mode === 'dub') {
+    return (
+      <div className="flex flex-col items-center gap-6 pt-6 pb-2" data-testid="dub-end">
+        <p className="animate-pop font-display text-4xl font-black">What have you done?</p>
+        <BackToLobby amHost={!!me?.isHost} />
+      </div>
+    );
+  }
   const ranked = [...room.players]
     .filter((p) => !p.isSpectator)
     .sort((a, b) => b.score - a.score)
@@ -591,13 +613,17 @@ export function FinalResults({ room, me }: PhaseProps) {
           {alsoOnPodium.map((p) => `${MEDALS[p.rank - 1]} ${p.nickname}`).join(', ')}
         </p>
       )}
-      {me?.isHost ? (
-        <Button size="lg" onClick={() => void backToLobby()}>
-          Back to the lobby
-        </Button>
-      ) : (
-        <p className="text-muted">Waiting for the host to go back to the lobby…</p>
-      )}
+      <BackToLobby amHost={!!me?.isHost} />
     </div>
+  );
+}
+
+function BackToLobby({ amHost }: { amHost: boolean }) {
+  return amHost ? (
+    <Button size="lg" onClick={() => void backToLobby()}>
+      Back to the lobby
+    </Button>
+  ) : (
+    <p className="text-muted">Waiting for the host to go back to the lobby…</p>
   );
 }

@@ -87,6 +87,86 @@ describe('GameRunner', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
 
+  describe('dub mode', () => {
+    const clip = (id: string, durationMs = 1000): SoundRef & { uploadedBy: string } => ({
+      id,
+      label: id,
+      durationMs,
+      url: '',
+      uploadedBy: 'someone',
+      video: { youtubeId: 'dQw4w9WgXcQ', startMs: 5000 },
+    });
+    const dubRoom = (names?: string[]) => {
+      const s = setup(names);
+      s.room.settings = {
+        ...s.room.settings,
+        mode: 'dub',
+        rounds: 1,
+        selectedSoundIds: ['lib:s1', 'c1'],
+      };
+      s.room.customSounds.push(clip('c1'));
+      return s;
+    };
+
+    it('plays ticked clips only, and refuses to start without one', async () => {
+      const { game, room, id } = dubRoom();
+      room.settings.selectedSoundIds = ['lib:s1'];
+      expect(await errorCode(() => game.start(room.code, id('Alice')))).toBe('NO_CLIPS');
+      room.settings.selectedSoundIds = ['lib:s1', 'c1'];
+      await game.start(room.code, id('Alice'));
+      expect(room.game!.sounds.map((s) => s.id)).toEqual(['c1']);
+    });
+
+    it('never plays a clip in the other modes', async () => {
+      const { game, room, id } = dubRoom();
+      room.settings.mode = 'classic';
+      await game.start(room.code, id('Alice'));
+      expect(room.game!.sounds.map((s) => s.id)).toEqual(['lib:s1']);
+    });
+
+    it('shows the clip from the intro on, without teams', async () => {
+      const { game, room, id } = dubRoom();
+      await game.start(room.code, id('Alice'));
+      expect(room.phase).toBe('ROUND_INTRO');
+      expect(room.game!.reference?.video?.youtubeId).toBe('dQw4w9WgXcQ');
+      expect(room.game!.teams).toBeNull();
+      advanceTo(room, 'REFERENCE');
+      expect(room.game!.reference!.startsAt).toBeGreaterThan(0);
+    });
+
+    it('records a long clip whole, and waits longer for its uploads', async () => {
+      const { game, room, id } = dubRoom();
+      room.customSounds = [clip('c1', 3_600_000)];
+      await game.start(room.code, id('Alice'));
+      advanceTo(room, 'RECORDING');
+      const { startsAt, endsAt } = room.game!.recording!;
+      expect(endsAt - startsAt).toBe(3_600_000 + room.settings.extraRecordMs);
+      expect(room.game!.deadline).toBe(endsAt + 120_000);
+    });
+
+    it('plays one mashup of everyone, then ends without votes or scores', async () => {
+      const { game, room, id } = dubRoom();
+      await game.start(room.code, id('Alice'));
+      advanceTo(room, 'RECORDING');
+      vi.advanceTimersByTime(T.countdownMs + 2100);
+      game.finishUpload(room, id('Alice'), 'f1', 240);
+      game.finishUpload(room, id('Bob'), 'f2', -30);
+      game.finishUpload(room, id('Carol'), 'f3');
+      advanceTo(room, 'PLAYBACK');
+      expect(room.game!.performances).toHaveLength(1);
+      expect(room.game!.performances[0]!.parts.map((p) => p.leadMs).sort()).toEqual([-30, 0, 240]);
+
+      const seen = new Set<Phase>();
+      for (let i = 0; i < 1000 && room.phase !== 'FINAL_RESULTS'; i++) {
+        vi.advanceTimersByTime(10);
+        seen.add(room.phase);
+      }
+      expect(room.phase).toBe('FINAL_RESULTS');
+      expect(seen.has('VOTING')).toBe(false);
+      expect(seen.has('ROUND_RESULTS')).toBe(false);
+    });
+  });
+
   it('only lets the host start, with at least 2 connected players', async () => {
     const { rooms, game, room, id } = setup(['Alice', 'Bob']);
     expect(await errorCode(() => game.start(room.code, id('Bob')))).toBe('NOT_HOST');

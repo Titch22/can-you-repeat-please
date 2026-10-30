@@ -11,8 +11,9 @@ const originOf = (url: string | undefined) => {
 
 /**
  * Security headers for everything the game server sends, and the Content Security Policy of
- * the web app: scripts only from this origin (an injected script couldn't run, nor read the
- * admin token), connections only to this server, the sound library and LiveKit, no framing.
+ * the web app: scripts only from this origin and YouTube's player API (an injected script
+ * couldn't run, nor read the admin token), connections only to this server, the sound library
+ * and LiveKit, no framing of this site, and only YouTube's player framed by it (Dub mode).
  */
 export function securityHeaders(opts: {
   soundsPublicUrl?: string;
@@ -26,7 +27,8 @@ export function securityHeaders(opts: {
 
   const csp = [
     "default-src 'self'",
-    "script-src 'self'",
+    "script-src 'self' https://www.youtube.com",
+    'frame-src https://www.youtube-nocookie.com',
     // React sets style attributes (progress bars, avatar colors).
     "style-src 'self' 'unsafe-inline'",
     "font-src 'self'",

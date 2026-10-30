@@ -18,6 +18,7 @@ import {
 import { replay } from '../lib/audio';
 import { errorMessage } from '../lib/errors';
 import { useLibrary } from '../lib/library';
+import { ClipForm } from './ClipForm';
 import { PlayButton } from './game/bits';
 import {
   isFiltered,
@@ -36,7 +37,8 @@ type Listed = SoundRef & { sharedBy?: string };
 /**
  * The sounds a game can use: the shared library (filtered by tags, length and name), the own
  * sounds of the players sharing theirs, and this room's uploads, each with a checkbox deciding
- * whether it can come up (host only). Anyone can upload; uploads vanish with the room.
+ * whether it can come up (host only). Anyone can upload; uploads vanish with the room. Dub mode
+ * only lists the room's YouTube clips, which anyone can add too.
  */
 export function SoundsPanel({
   room,
@@ -86,10 +88,14 @@ export function SoundsPanel({
   const [roomOnly, setRoomOnly] = useState(false);
   // Teams mode only plays dialogues (library sounds tagged "team" with their lines).
   const teamsMode = room.settings.mode === 'teams';
-  const uploads = teamsMode ? [] : room.sounds.filter((s) => s.uploadedBy);
-  const all: Listed[] = teamsMode
-    ? [...(library ?? []), ...shared].filter(isDialogue)
-    : [...(library ?? []), ...shared, ...uploads];
+  const dubMode = room.settings.mode === 'dub';
+  const clips = room.sounds.filter((s) => s.video);
+  const uploads = teamsMode || dubMode ? [] : room.sounds.filter((s) => s.uploadedBy && !s.video);
+  const all: Listed[] = dubMode
+    ? clips
+    : teamsMode
+      ? [...(library ?? []), ...shared].filter(isDialogue)
+      : [...(library ?? []), ...shared, ...uploads];
   const tagFilterOn = filter.tags.length > 0 || roomOnly;
   const visible = all.filter((s) => {
     if (!matchesBasics(s, filter)) return false;
@@ -143,7 +149,7 @@ export function SoundsPanel({
             <Button
               variant="ghost"
               size="sm"
-              hidden={teamsMode}
+              hidden={teamsMode || dubMode}
               disabled={uploads.length === 0}
               onClick={() => setSelected(uploads.map((s) => s.id))}
             >
@@ -153,41 +159,50 @@ export function SoundsPanel({
         )
       }
     >
-      {teamsMode ? (
+      {dubMode ? (
+        <ClipForm
+          disabledReason={
+            room.sounds.length < MAX_CUSTOM_SOUNDS_PER_ROOM ? undefined : 'Clip limit reached.'
+          }
+        />
+      ) : teamsMode ? (
         <p className="rounded-control border border-dashed border-line-strong bg-surface-sunken/40 p-3 text-sm text-muted">
           Teams mode plays <b className="text-ink">dialogues</b>: library sounds tagged “team” whose
           lines (who speaks when) are set. Room uploads aren’t used in this mode.
         </p>
       ) : (
-        <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_ROOM - uploads.length} />
+        <UploadForm code={room.code} remaining={MAX_CUSTOM_SOUNDS_PER_ROOM - room.sounds.length} />
       )}
-      <ShareMySounds sharing={!!room.players.find((p) => p.id === meId)?.sharesSounds} />
-
-      <div className="mt-4">
-        <SoundFilters
-          value={filter}
-          onChange={setFilter}
-          tags={tagCounts(
-            (teamsMode ? all : [...(library ?? []), ...shared]).map((s) => ({
-              tags: s.tags ?? [],
-            })),
-          )}
-          extraChips={
-            uploads.length > 0
-              ? [
-                  {
-                    key: 'room-uploads',
-                    label: 'uploaded here',
-                    count: uploads.length,
-                    on: roomOnly,
-                    toggle: () => setRoomOnly(!roomOnly),
-                  },
-                ]
-              : []
-          }
-        />
-      </div>
-      {libraryError ? (
+      {!dubMode && (
+        <>
+          <ShareMySounds sharing={!!room.players.find((p) => p.id === meId)?.sharesSounds} />
+          <div className="mt-4">
+            <SoundFilters
+              value={filter}
+              onChange={setFilter}
+              tags={tagCounts(
+                (teamsMode ? all : [...(library ?? []), ...shared]).map((s) => ({
+                  tags: s.tags ?? [],
+                })),
+              )}
+              extraChips={
+                uploads.length > 0
+                  ? [
+                      {
+                        key: 'room-uploads',
+                        label: 'uploaded here',
+                        count: uploads.length,
+                        on: roomOnly,
+                        toggle: () => setRoomOnly(!roomOnly),
+                      },
+                    ]
+                  : []
+              }
+            />
+          </div>
+        </>
+      )}
+      {dubMode ? null : libraryError ? (
         <p className="mt-3 flex flex-wrap items-center gap-2 text-sm text-danger" role="alert">
           The sound library is unreachable: only this room’s uploads are listed.
           <Button variant="ghost" size="sm" onClick={() => void useLibrary.getState().load()}>
@@ -277,7 +292,9 @@ function SoundTile({
         aria-label={`Use “${sound.label}” in the game`}
         className="size-4 shrink-0 cursor-pointer disabled:cursor-default"
       />
-      <PlayButton label={`Play “${sound.label}”`} onClick={() => replay(sound.url)} />
+      {!sound.video && (
+        <PlayButton label={`Play “${sound.label}”`} onClick={() => replay(sound.url)} />
+      )}
       <span className="min-w-0 flex-1 leading-tight">
         <span
           className={`block truncate text-sm font-semibold ${checked ? 'text-ink' : ''}`}

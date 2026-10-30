@@ -9,6 +9,11 @@ const MODES: { mode: GameMode; label: string; hint: string }[] = [
     label: 'Teams',
     hint: 'Random pairs dub the two characters of a movie dialogue. 3 players or more.',
   },
+  {
+    mode: 'dub',
+    label: 'Dub',
+    hint: 'Everyone talks over a muted YouTube clip at once, then enjoys the mashup. No votes.',
+  },
 ];
 
 export function SettingsPanel({ settings, editable }: { settings: Settings; editable: boolean }) {
@@ -20,7 +25,7 @@ export function SettingsPanel({ settings, editable }: { settings: Settings; edit
         <div className="flex flex-col gap-2">
           <span className="text-sm text-muted">Game mode</span>
           <div
-            className="grid grid-cols-2 gap-1 rounded-control bg-surface-sunken p-1"
+            className="grid grid-cols-3 gap-1 rounded-control bg-surface-sunken p-1"
             role="group"
             aria-label="Game mode"
           >
@@ -64,16 +69,18 @@ export function SettingsPanel({ settings, editable }: { settings: Settings; edit
           disabled={!editable}
           onChange={(e) => set({ extraRecordMs: Number(e.target.value) })}
         />
-        <Slider
-          label="Voting time"
-          display={`${settings.votingMs / 1000}s`}
-          min={10_000}
-          max={60_000}
-          step={5000}
-          value={settings.votingMs}
-          disabled={!editable}
-          onChange={(e) => set({ votingMs: Number(e.target.value) })}
-        />
+        {settings.mode !== 'dub' && (
+          <Slider
+            label="Voting time"
+            display={`${settings.votingMs / 1000}s`}
+            min={10_000}
+            max={60_000}
+            step={5000}
+            value={settings.votingMs}
+            disabled={!editable}
+            onChange={(e) => set({ votingMs: Number(e.target.value) })}
+          />
+        )}
         <label className="flex items-center gap-2 text-sm">
           <input
             type="checkbox"

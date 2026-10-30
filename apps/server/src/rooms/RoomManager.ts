@@ -250,6 +250,8 @@ export class RoomManager {
   sweepIdle() {
     const now = this.now();
     for (const room of [...this.rooms.values()]) {
+      // A long Dub mode clip changes nothing for a while, but its phase is still running.
+      if ((room.game?.deadline ?? 0) > now) continue;
       if (now - room.lastActivity > ROOM_IDLE_TIMEOUT_MS) this.close(room, 'idle');
     }
   }

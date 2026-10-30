@@ -23,16 +23,23 @@ export function Lobby({ room }: { room: RoomState }) {
   const meId = useGame((s) => s.playerId);
   const amHost = room.players.some((p) => p.id === meId && p.isHost);
   const [startError, setStartError] = useState<string | null>(null);
-  const teams = room.settings.mode === 'teams';
+  const { mode } = room.settings;
+  const teams = mode === 'teams';
   const minPlayers = teams ? MIN_PLAYERS_TEAMS : MIN_PLAYERS;
   const enoughPlayers = room.players.filter((p) => p.connected).length >= minPlayers;
   // Classic: a ticked library sound, or a ticked upload that still exists. Teams: a ticked
-  // dialogue. The server has the final say (library sounds deleted since are skipped).
+  // dialogue. Dub: a ticked clip. The server has the final say (library sounds deleted since
+  // are skipped).
   const library = useLibrary((s) => s.sounds);
-  const uploadIds = new Set(room.sounds.map((s) => s.id));
+  const uploadIds = new Set(room.sounds.filter((s) => !s.video).map((s) => s.id));
+  const clipIds = new Set(room.sounds.filter((s) => s.video).map((s) => s.id));
   const dialogueIds = new Set((library ?? []).filter(isDialogue).map((s) => s.id));
   const enoughSounds = room.settings.selectedSoundIds.some((id) =>
-    teams ? dialogueIds.has(id) : id.startsWith(LIBRARY_ID_PREFIX) || uploadIds.has(id),
+    mode === 'dub'
+      ? clipIds.has(id)
+      : teams
+        ? dialogueIds.has(id)
+        : id.startsWith(LIBRARY_ID_PREFIX) || uploadIds.has(id),
   );
   useDocumentTitle(`${room.code} · Lobby`);
 
@@ -79,7 +86,9 @@ export function Lobby({ room }: { room: RoomState }) {
                   : !enoughSounds
                     ? teams
                       ? 'Tick at least one dialogue.'
-                      : 'Tick at least one sound.'
+                      : mode === 'dub'
+                        ? 'Tick at least one clip.'
+                        : 'Tick at least one sound.'
                     : `${room.settings.rounds} rounds. Have fun!`}
               </p>
               <ErrorText>{startError}</ErrorText>

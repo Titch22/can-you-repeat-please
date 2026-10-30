@@ -80,6 +80,16 @@ Fixed durations live in `apps/server/src/game/timing.ts`. `GAME_FAST=1` switches
 - **Stitching happens in the browser** (`apps/web/src/lib/dialogue.ts`): for each line of the reference, the recording of whoever voices that line, from the line's start, for its length. `playSegmentsAt` (lib/audio.ts) schedules those slices on the decoded buffers with 15 ms fades, at the server-synchronized start, so everyone hears the stitched scene together. Downloads render the same segments in an `OfflineAudioContext` and encode a WAV.
 - **Dialogue lines** live in the sound library (`sound_lines` table), edited in `/admin` on a waveform.
 
+### Dub mode
+
+- **Embed only:** the server never contacts YouTube (it would hit the bot check). A clip is a room sound with `video` and no `url`; `room:addClip` stores its id and times. `room.reference` is set from the round intro on, so clients can load the video ahead of time.
+- **One player per round:** `DubVideo` lives in `GameView`, outside the stage that re-mounts on each phase, and seeks between phases. Reloading would be slow, and could mean another ad.
+- **Sync is per device.** A video starts when it can, so `startsAt` only says when to press play. When the player reports PLAYING, `DubVideo` reads the video's real time (it is already about 0.2 s past the seek by then) and publishes when the scene began (`useDubScene`). Voices are placed from that, not from `startsAt`.
+- **Recording** is unchanged: it starts at the scheduled time, a moment before the video, so no voice is lost. The upload sends `leadMs`, how much of the recording comes before the clip. Playback skips that much (`performanceSegments`).
+- **The mashup:** after recording, `mashup` (rules.ts) makes the round's one performance from everyone's recordings. `room.teams` stays null; PLAYBACK goes straight to the next round, without VOTING or ROUND_RESULTS.
+- **Long clips:** clips have no maximum, so the recording route accepts up to 100 MB in Dub mode's recording phase (2 MB otherwise; nginx needs the same, see the example config), uploads get up to a quarter of the clip's length (2 minutes at most), and a room with a phase still running is never closed as idle.
+- **Fallbacks:** browsers refuse sound before a first click, so after 1.5 s the video plays muted. After 4 s without video, the scene starts anyway. No re-sync after the start: a video that buffers mid-clip drifts from the voices.
+
 ## Voice and muting
 
 - **Joining:** after joining a room over Socket.IO, the client calls `POST /api/rooms/:code/voice-token`. The token is scoped to the LiveKit room `cyrp-<code>` with the identity `<playerId>`. The client then connects with `livekit-client`.
@@ -138,7 +148,7 @@ In a room, a player is a nickname plus a random session token. Optional player a
   - nginx `limit_req` zones in front.
 - **Files:** uploads are ≤ 2 MB, recognised by their bytes, measured by the server, never executed or transcoded. They are served with `nosniff` and `Content-Security-Policy: sandbox`, so a file opened directly can't act as a page.
 - **Web app headers:**
-  - a strict CSP: scripts only from the game's origin; connections only to the game, the library and LiveKit; no framing;
+  - a strict CSP: scripts only from the game's origin and `www.youtube.com` (the player API, for Dub mode; this applies to every page, so YouTube's scripts are trusted); connections only to the game, the library and LiveKit; only `www.youtube-nocookie.com` can be framed, and nobody can frame the game;
   - `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer` and a restrictive `Permissions-Policy`.
 - **Voice:** LiveKit tokens last 2 minutes, are scoped to one room, and allow the microphone only (no camera, screen share or data messages).
 - **Admin (sound library):**
@@ -165,7 +175,7 @@ apps/sounds/src/
   library.ts      SQLite (node:sqlite) metadata + content-addressed files
   app.ts          public read API, admin API (bearer token), static /files
   importDir.ts    folder import (reads manifest.json ids and labels when present)
-  cli/import.ts   `pnpm --filter @cyrp/sounds import <dir> --tag <tag>`
+  cli/import.ts   `pnpm --filter @cyrp/sounds run import <dir> --tag <tag>`
 packages/audio/   format sniffing and duration measuring, shared with the game server
 ```
 

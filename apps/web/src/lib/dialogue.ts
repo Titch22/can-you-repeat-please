@@ -27,7 +27,8 @@ export const speaks = (role: Role | null | undefined, speaker: Speaker) =>
  * stitched: during each line, the recording of whoever voices that line (same timecodes as the
  * original). Lines nobody recorded stay silent. Under them plays the scene's background (without
  * the voices) if it has one, at the original's level so it keeps the film's balance. Classic
- * performances play whole.
+ * performances play whole, and so does Dub mode's mashup: everyone's voices at once, each lined
+ * up with the clip by its `leadMs`.
  */
 export function performanceSegments(
   performance: Performance,
@@ -36,11 +37,11 @@ export function performanceSegments(
   const lines = reference?.lines;
   const whole = performance.parts.every((p) => p.role === null) || !lines?.length;
   if (whole) {
-    return performance.parts.map((p) => ({
-      url: p.url,
-      offsetMs: 0,
+    return performance.parts.map(({ url, leadMs = 0 }) => ({
+      url,
+      offsetMs: Math.max(0, leadMs),
       durationMs: performance.durationMs,
-      atMs: 0,
+      atMs: Math.max(0, -leadMs),
     }));
   }
   const background: Segment[] = reference?.backgroundUrl

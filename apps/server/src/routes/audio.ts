@@ -3,8 +3,10 @@ import path from 'node:path';
 import express, { Router, type ErrorRequestHandler, type RequestHandler } from 'express';
 import {
   MAX_CUSTOM_SOUND_MS,
+  MAX_DUB_UPLOAD_BYTES,
   MAX_UPLOAD_BYTES,
   MIN_CUSTOM_SOUND_MS,
+  RecordingLeadSchema,
   SoundLabelSchema,
   type SharedSounds,
 } from '@cyrp/shared';
@@ -43,11 +45,20 @@ export function audioRoutes(
     next();
   };
 
+  const rawAudio = express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES });
+  const rawLongAudio = express.raw({ type: () => true, limit: MAX_DUB_UPLOAD_BYTES });
+  /** A Dub mode recording lasts as long as its clip; only then is a big body read into memory. */
+  const rawRecording: RequestHandler = (req, res, next) => {
+    const { room } = res.locals as SessionLocals;
+    const long = room.game?.mode === 'dub' && room.phase === 'RECORDING';
+    (long ? rawLongAudio : rawAudio)(req, res, next);
+  };
+
   // The body is the raw audio blob (Content-Type is ignored: the bytes are sniffed instead).
   router.post(
     '/api/rooms/:code/rounds/:round/recording',
     requireSession(rooms),
-    express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
+    rawRecording,
     async (req, res) => {
       const { room, player } = res.locals as SessionLocals;
       const format = Buffer.isBuffer(req.body) ? sniffAudio(req.body) : null;
@@ -67,7 +78,8 @@ export function audioRoutes(
         throw err;
       }
       room.files.set(fileId, { path: file, mime: format.mime, kind: 'recording' });
-      if (!game.finishUpload(room, player.id, fileId)) {
+      const leadMs = RecordingLeadSchema.parse(req.query.leadMs);
+      if (!game.finishUpload(room, player.id, fileId, leadMs)) {
         room.files.delete(fileId);
         await storage.deleteFile(file);
         throw new RoomError('WRONG_PHASE');
@@ -82,7 +94,7 @@ export function audioRoutes(
     '/api/rooms/:code/sounds',
     uploadLimit,
     requireSession(rooms),
-    express.raw({ type: () => true, limit: MAX_UPLOAD_BYTES }),
+    rawAudio,
     async (req, res) => {
       const { room, player } = res.locals as SessionLocals;
       rooms.assertCanAddSound(room);

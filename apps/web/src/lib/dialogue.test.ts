@@ -59,6 +59,24 @@ describe('performanceSegments', () => {
     ]);
   });
 
+  it('plays a dub mashup’s voices together, each lined up with the clip', () => {
+    const team: Performance = {
+      id: 'mashup-1',
+      playerIds: ['a', 'b', 'c'],
+      parts: [
+        { playerId: 'a', url: '/a', role: null, leadMs: 200 }, // started before the clip
+        { playerId: 'b', url: '/b', role: null, leadMs: -150 }, // started after it
+        { playerId: 'c', url: '/c', role: null, leadMs: 0 },
+      ],
+      durationMs: 5000,
+    };
+    expect(performanceSegments(team, { url: '', lines: [] })).toEqual([
+      { url: '/a', offsetMs: 200, atMs: 0, durationMs: 5000 },
+      { url: '/b', offsetMs: 0, atMs: 150, durationMs: 5000 },
+      { url: '/c', offsetMs: 0, atMs: 0, durationMs: 5000 },
+    ]);
+  });
+
   it('plays a classic recording whole', () => {
     const p = perf([{ playerId: 'ann', url: '/ann', role: null }]);
     expect(performanceSegments(p, undefined)).toEqual([

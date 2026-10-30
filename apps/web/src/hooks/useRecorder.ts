@@ -4,6 +4,7 @@ import { audioContext } from '../lib/audio';
 import { serverNow } from '../lib/clock';
 import { getMicStream } from '../lib/mic';
 import { loadSession } from '../lib/storage';
+import { useDubScene } from '../lib/youtube';
 
 export type RecorderStatus =
   'idle' | 'preparing' | 'countdown' | 'recording' | 'uploading' | 'done' | 'no-mic' | 'error';
@@ -30,11 +31,18 @@ export function useRecorder(room: RoomState, canRecord: boolean) {
     let recorder: MediaRecorder | null = null;
     let meterSource: MediaStreamAudioSourceNode | null = null;
     const timers: ReturnType<typeof setTimeout>[] = [];
+    let recordedFrom = 0;
 
     const upload = async (blob: Blob) => {
       setStatus('uploading');
+      // Dub mode: the clip starts a moment after the recording, on each device its own moment.
+      const scene = useDubScene.getState();
+      const lead =
+        scene.startsAt === Number(startsAt)
+          ? `?leadMs=${Math.round(scene.sceneStartsAt - recordedFrom)}`
+          : '';
       try {
-        const res = await fetch(`/api/rooms/${code}/rounds/${round}/recording`, {
+        const res = await fetch(`/api/rooms/${code}/rounds/${round}/recording${lead}`, {
           method: 'POST',
           headers: { 'X-Session-Token': loadSession()?.sessionToken ?? '' },
           body: blob,
@@ -89,6 +97,7 @@ export function useRecorder(room: RoomState, canRecord: boolean) {
           () => {
             if (stopped) return;
             rec.start();
+            recordedFrom = serverNow();
             setStatus('recording');
             timers.push(
               setTimeout(

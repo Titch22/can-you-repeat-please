@@ -22,8 +22,18 @@ server {
     listen [::]:80;
     server_name game.example.com;
 
-    # Recording uploads are at most 2 MB.
+    # Recording uploads are at most 2 MB...
     client_max_body_size 3m;
+
+    # ...except in Dub mode, where they last as long as the clip (at most 100 MB).
+    location ~ ^/api/rooms/[^/]+/rounds/[^/]+/recording$ {
+        client_max_body_size 101m;
+        limit_req zone=cyrp_api burst=40 nodelay;
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
 
     location /api/ {
         limit_req zone=cyrp_api burst=40 nodelay;

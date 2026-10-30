@@ -1,6 +1,8 @@
+import { randomUUID } from 'node:crypto';
 import type { Server, Socket } from 'socket.io';
 import { z } from 'zod';
 import {
+  AddClipPayload,
   clientAddress,
   KickPayload,
   RoomCreatePayload,
@@ -155,6 +157,21 @@ export function registerRoomHandlers(io: GameServer, rooms: RoomManager, deps: H
         // Who is logged in when the socket connected (the page reconnects it on login/logout).
         const userId = deps.accountOf(socket.handshake.headers.cookie)?.id ?? null;
         rooms.setSharing(code, playerId, userId, share);
+      }),
+    );
+
+    socket.on(
+      'room:addClip',
+      handler(AddClipPayload, ({ youtubeId, startMs, endMs, label }) => {
+        const { code, playerId } = membership();
+        rooms.addCustomSound(rooms.getOrThrow(code), {
+          id: randomUUID(),
+          label,
+          durationMs: endMs - startMs,
+          url: '',
+          uploadedBy: playerId,
+          video: { youtubeId, startMs },
+        });
       }),
     );
 

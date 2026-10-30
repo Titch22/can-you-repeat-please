@@ -12,6 +12,8 @@ export interface Recording {
   /** Also the stored file id (random). */
   clipId: string;
   url: string;
+  /** Dub mode: ms of the recording before the clip starts. */
+  leadMs?: number;
 }
 
 /** Everything about the game in progress. Lives on the room; null in the lobby. */

@@ -13,6 +13,10 @@ export const ROOM_IDLE_TIMEOUT_MS = 30 * 60_000;
 
 /** Longest recording window: the longest custom sound plus the max extra recording time. */
 export const MAX_RECORDING_MS = 23_000;
+/** Dub mode: the shortest YouTube clip. Clips have no maximum, only their recordings do. */
+export const MIN_DUB_CLIP_MS = 1000;
+/** Dub mode: a recording lasts as long as its clip. About an hour of browser audio. */
+export const MAX_DUB_UPLOAD_BYTES = 100 * 1024 * 1024;
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 export const MAX_CUSTOM_SOUND_MS = 20_000;
 export const MIN_CUSTOM_SOUND_MS = 200;

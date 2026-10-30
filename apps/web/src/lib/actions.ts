@@ -1,4 +1,4 @@
-import type { Ack, ErrorCode, Settings, SharedSounds, SoundRef } from '@cyrp/shared';
+import type { Ack, AddClip, ErrorCode, Settings, SharedSounds, SoundRef } from '@cyrp/shared';
 import { useGame } from '../store';
 import { socket } from './socket';
 import { clearAudioCache } from './audio';
@@ -123,6 +123,9 @@ export async function fetchSharedSounds(code: string): Promise<SharedSounds[]> {
 /** Logged in: share (or stop sharing) my own sounds (/sounds) with the room. */
 export const shareSounds = (share: boolean) =>
   call(socket.timeout(TIMEOUT_MS).emitWithAck('room:shareSounds', { share }));
+
+export const addClip = (clip: AddClip) =>
+  call(socket.timeout(TIMEOUT_MS).emitWithAck('room:addClip', clip));
 
 export const deleteSound = (soundId: string) =>
   call(socket.timeout(TIMEOUT_MS).emitWithAck('room:deleteSound', { soundId }));

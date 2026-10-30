@@ -86,6 +86,25 @@ export function pairTeams(playerIds: readonly string[], round: number, rng: Rng)
   return teams;
 }
 
+/** Dub mode's one performance: the recordings of everyone who made one, all at once. */
+export function mashup(
+  recordings: readonly { playerId: string; url: string; leadMs?: number }[],
+  round: number,
+  durationMs: number,
+): Performance {
+  return {
+    id: `mashup-${round}`,
+    playerIds: recordings.map((r) => r.playerId),
+    parts: recordings.map(({ playerId, url, leadMs = 0 }) => ({
+      playerId,
+      url,
+      role: null,
+      leadMs,
+    })),
+    durationMs,
+  };
+}
+
 /**
  * What gets played and voted on, in a random order. Classic: one performance per recording.
  * Teams: one per team with at least one recording (a member who didn't record is still part of

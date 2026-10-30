@@ -4,6 +4,7 @@ import {
   MAX_TAGS_PER_SOUND,
   MAX_VOTES_PER_PLAYER,
   MIN_DIALOGUE_LINE_MS,
+  MIN_DUB_CLIP_MS,
   ROOM_CODE_LENGTH,
 } from './constants.js';
 
@@ -36,8 +37,11 @@ export const RoomCodeSchema = z
   .toUpperCase()
   .regex(new RegExp(`^[A-Z]{${ROOM_CODE_LENGTH}}$`));
 
-/** classic: everyone imitates the same sound. teams: pairs dub the two characters of a dialogue. */
-export const GameModeSchema = z.enum(['classic', 'teams']);
+/**
+ * classic: everyone imitates the same sound. teams: pairs dub the two characters of a dialogue.
+ * dub: everyone talks over a muted YouTube clip at once, and hears the mashup. No votes.
+ */
+export const GameModeSchema = z.enum(['classic', 'teams', 'dub']);
 
 export const SettingsSchema = z.object({
   mode: GameModeSchema,
@@ -81,6 +85,41 @@ export const VotePayload = z.object({
 export const TimeSyncPayload = z.object({ clientTime: z.number() });
 export const SetVoiceMutedPayload = z.object({ muted: z.boolean() });
 export const SoundLabelSchema = visibleText(40);
+
+const YOUTUBE_ID = /^[\w-]{11}$/;
+
+/** The video id of a YouTube link (watch, youtu.be, shorts, embed, live), or null. */
+export function youtubeId(link: string) {
+  let url: URL;
+  try {
+    url = new URL(link.trim());
+  } catch {
+    return null;
+  }
+  const host = url.hostname.replace(/^(www|m|music)\./, '');
+  const id =
+    host === 'youtu.be'
+      ? url.pathname.slice(1)
+      : host === 'youtube.com' || host === 'youtube-nocookie.com'
+        ? url.pathname === '/watch'
+          ? url.searchParams.get('v')
+          : /^\/(?:shorts|embed|live)\/([^/]+)/.exec(url.pathname)?.[1]
+        : null;
+  return id && YOUTUBE_ID.test(id) ? id : null;
+}
+
+/** A YouTube clip for Dub mode: from `startMs` to `endMs` of the video. */
+export const AddClipPayload = z
+  .object({
+    youtubeId: z.string().regex(YOUTUBE_ID),
+    startMs: z.number().int().min(0),
+    endMs: z.number().int().positive(),
+    label: SoundLabelSchema,
+  })
+  .refine((c) => c.endMs - c.startMs >= MIN_DUB_CLIP_MS, { message: 'clip too short' });
+
+/** Query of a recording upload: ms of it before the clip starts (Dub mode, negative if after). */
+export const RecordingLeadSchema = z.coerce.number().int().min(-60_000).max(60_000).catch(0);
 
 // Sound library (apps/sounds)
 
