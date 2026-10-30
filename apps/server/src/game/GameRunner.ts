@@ -237,8 +237,9 @@ export class GameRunner {
     const g = this.game(room);
     const { timing } = this.deps;
     const startsAt = this.now() + timing.countdownMs;
-    const wanted = g.reference!.durationMs + room.settings.extraRecordMs;
-    const length = g.mode === 'dub' ? wanted : Math.min(wanted, MAX_RECORDING_MS);
+    const clipMs = g.reference!.durationMs;
+    const length =
+      g.mode === 'dub' ? clipMs : Math.min(clipMs + room.settings.extraRecordMs, MAX_RECORDING_MS);
     g.recording = { startsAt, endsAt: startsAt + length };
     this.enter(room, 'RECORDING');
     // A clip's recording can be long to send; the phase still ends as soon as they're all in.

@@ -140,7 +140,7 @@ describe('GameRunner', () => {
       await game.start(room.code, id('Alice'));
       advanceTo(room, 'RECORDING');
       const { startsAt, endsAt } = room.game!.recording!;
-      expect(endsAt - startsAt).toBe(3_600_000 + room.settings.extraRecordMs);
+      expect(endsAt - startsAt).toBe(3_600_000); // no extra time, whatever the setting says
       expect(room.game!.deadline).toBe(endsAt + 120_000);
     });
 

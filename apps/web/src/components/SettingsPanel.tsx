@@ -59,16 +59,18 @@ export function SettingsPanel({ settings, editable }: { settings: Settings; edit
           disabled={!editable}
           onChange={(e) => set({ rounds: Number(e.target.value) })}
         />
-        <Slider
-          label="Extra recording time"
-          display={`+${settings.extraRecordMs / 1000}s`}
-          min={0}
-          max={3000}
-          step={500}
-          value={settings.extraRecordMs}
-          disabled={!editable}
-          onChange={(e) => set({ extraRecordMs: Number(e.target.value) })}
-        />
+        {settings.mode !== 'dub' && (
+          <Slider
+            label="Extra recording time"
+            display={`+${settings.extraRecordMs / 1000}s`}
+            min={0}
+            max={3000}
+            step={500}
+            value={settings.extraRecordMs}
+            disabled={!editable}
+            onChange={(e) => set({ extraRecordMs: Number(e.target.value) })}
+          />
+        )}
         {settings.mode !== 'dub' && (
           <Slider
             label="Voting time"
